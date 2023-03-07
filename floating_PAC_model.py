@@ -7,22 +7,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import dill
 
-#%% 
-# Funcs
-
-def plot_FK(f_FK, q_repl, p_repl):
-    s_evals = np.linspace(0,1,11)
-    FK_evals = np.empty((s_evals.size,2,))
-    FK_evals[:] = np.nan
-    for i_s in range(s_evals.size):
-       FK_evals[i_s] = np.array(f_FK.evalf(subs=q_repl|p_repl|{d:0}|{s:s_evals[i_s]})).squeeze() # very slow TODO - different eval method
-    fig, ax = plt.subplots()
-    ax.plot(FK_evals[:,0],FK_evals[:,1])
-    plt.xlim(FK_evals[0,0]-1.2,FK_evals[0,0]+1.2)
-    plt.ylim(FK_evals[0,1]-1.2,FK_evals[0,1]+1.2)
-    ax.set_aspect('equal','box')
-    plt.show()
-
 #%%
 # Init
 
@@ -90,17 +74,17 @@ print("B gen time: " + str(toc-tic))
 
 #%% 
 # Centrifugal/Coriolis matrix
-tic = time.perf_counter()
+# tic = time.perf_counter()
 
-C = sm.zeros(5,5)      
-for i in range(5):            
-    for j in range(5):    
-        for k in range(5):
-            Christoffel = 0.5*(sm.diff(B[i,j],q[k]) + sm.diff(B[i,k],q[j]) - sm.diff(B[j,k],q[i]))
-            C[i,j] = C[i,j] + Christoffel*dq[k]
+# C = sm.zeros(5,5)      
+# for i in range(5):            
+#     for j in range(5):    
+#         for k in range(5):
+#             Christoffel = 0.5*(sm.diff(B[i,j],q[k]) + sm.diff(B[i,k],q[j]) - sm.diff(B[j,k],q[i]))
+#             C[i,j] = C[i,j] + Christoffel*dq[k]
 
-toc = time.perf_counter()
-print("C gen time: " + str(toc-tic))
+# toc = time.perf_counter()
+# print("C gen time: " + str(toc-tic))
 
 #%%
 # Functions for numerical evaluation
@@ -108,7 +92,7 @@ print("C gen time: " + str(toc-tic))
 f_FK = sm.lambdify((q,p,s,d), fk)
 f_G = sm.lambdify((q,p), G)
 f_B = sm.lambdify((q,p), B)
-f_C = sm.lambdify((q,p,dq), C)
+# f_C = sm.lambdify((q,p,dq), C)
 
 #%% 
 # Save functions to file
@@ -116,19 +100,15 @@ f_C = sm.lambdify((q,p,dq), C)
 dill.dump(f_FK, open("f_FK", "wb"))
 dill.dump(f_G, open("f_G", "wb"))
 dill.dump(f_B, open("f_B", "wb"))
-dill.dump(f_C, open("f_C", "wb"))
+# dill.dump(f_C, open("f_C", "wb"))
 
 #%%
 # Test output
 
-p_vals = [1.0, 9.81, 1.0, 0.1]
-q_vals = [1.0, 1.0, 0.0, 0.0, 0.0]
-dq_vals = [0.0, 0.0, 0.0, 0.0, 1.0]
+# q_vals = [1.0, 1.0, 0.0, 0.0, 0.0]
+# dq_vals = [0.0, 0.0, 0.0, 0.0, 1.0]
 
 # print(f_FK(q_vals,p_vals,0.5,0.0))
 # print(f_G(q_vals,p_vals))
 # print(f_B(q_vals,p_vals))
 # print(f_C(q_vals,p_vals,dq_vals))
-
-# plot_FK(fk, dict(zip(q,q_vals)), dict(zip(p,p_vals))) # Test FK
-
