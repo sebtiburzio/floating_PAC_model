@@ -3,8 +3,6 @@
 
 import time
 import sympy as sm
-import matplotlib.pyplot as plt
-import numpy as np
 import dill
 
 #%%
@@ -32,10 +30,16 @@ s, v, d = sm.symbols('s v d')
 # Forward Kinematics
 tic = time.perf_counter()
 
-# spine x,z in object base frame
+# Spine x,z in object base frame
 alpha = theta_0*v + 0.5*theta_1*v**2
 fk[0] = L*sm.integrate(sm.cos(alpha),(v, 0, s))
 fk[1] = -L*sm.integrate(sm.sin(alpha),(v, 0, s)) # -ve to match rotation sense in robot frame
+
+# FK of midpoint and endpoint in base frame (for curvature IK)
+fk_mid_fixed = fk.subs(s, 0.5)
+fk_end_fixed = fk.subs(s, 1)
+J_mid_fixed = fk_mid_fixed.jacobian(sm.Matrix([theta_0, theta_1]))
+J_end_fixed = fk_end_fixed.jacobian(sm.Matrix([theta_0, theta_1]))
 
 # 3DOF floating base
 rot_phi = sm.rot_axis3(phi)[:2,:2]                  # +ve rotations around robot Y-axis
@@ -44,13 +48,23 @@ fk = sm.Matrix([x, z]) + rot_phi@(fk + D*rot_alpha@sm.Matrix([0, d]))
 
 toc = time.perf_counter()
 print("FK gen time: " + str(toc-tic))
+f_FK = sm.lambdify((q,p,s,d), fk)
+f_FK_mf = sm.lambdify((theta_0,theta_1,p), fk_mid_fixed)
+f_FK_ef = sm.lambdify((theta_0,theta_1,p), fk_end_fixed)
+f_J_mf = sm.lambdify((theta_0,theta_1,p), J_mid_fixed)
+f_J_ef = sm.lambdify((theta_0,theta_1,p), J_end_fixed)
+dill.dump(f_FK, open("./generated_functions/f_FK", "wb"))
+dill.dump(f_FK_mf, open("./generated_functions/f_FK_mf", "wb"))
+dill.dump(f_FK_ef, open("./generated_functions/f_FK_ef", "wb"))
+dill.dump(f_J_mf, open("./generated_functions/f_J_mf", "wb"))
+dill.dump(f_J_ef, open("./generated_functions/f_J_ef", "wb"))
 
 #%% 
 # Potential (gravity) vector
 tic = time.perf_counter()
 
 # Energy
-U_tip = 0.5*sm.integrate((fk[1].subs(s,1)),(d,-1/2,1/2)) # tip mass
+U_tip = 0.5*sm.integrate((fk[1].subs(s,1)),(d,-1/2,1/2)) # tip mass TODO - update for multiple masses on length and endpoint mass
 U_base = 0.5*sm.integrate((fk[1].subs(s,0)),(d,-1/2,1/2)) # base mass
 
 # Potential force
@@ -58,6 +72,8 @@ G = sm.Matrix([m*g*(U_base + U_tip)]).jacobian(q)
 
 toc = time.perf_counter()
 print("G gen time: " + str(toc-tic))
+f_G = sm.lambdify((q,p), G)
+dill.dump(f_G, open("./generated_functions/f_G", "wb"))
 
 #%% 
 # Inertia matrix
@@ -71,6 +87,8 @@ B = 0.5*m*sm.integrate(J_tip.transpose()@J_tip, (d, -1/2, 1/2)) + \
 
 toc = time.perf_counter()
 print("B gen time: " + str(toc-tic))
+f_B = sm.lambdify((q,p), B)
+dill.dump(f_B, open("./generated_functions/f_B", "wb"))
 
 #%% 
 # Centrifugal/Coriolis matrix
@@ -85,21 +103,7 @@ print("B gen time: " + str(toc-tic))
 
 # toc = time.perf_counter()
 # print("C gen time: " + str(toc-tic))
-
-#%%
-# Functions for numerical evaluation
-
-f_FK = sm.lambdify((q,p,s,d), fk)
-f_G = sm.lambdify((q,p), G)
-f_B = sm.lambdify((q,p), B)
 # f_C = sm.lambdify((q,p,dq), C)
-
-#%% 
-# Save functions to file
-
-dill.dump(f_FK, open("f_FK", "wb"))
-dill.dump(f_G, open("f_G", "wb"))
-dill.dump(f_B, open("f_B", "wb"))
 # dill.dump(f_C, open("f_C", "wb"))
 
 #%%

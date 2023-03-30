@@ -1,7 +1,7 @@
 #%%
 #!/usr/bin/env python
 
-%matplotlib ipympl
+#%matplotlib ipympl
 import numpy as np
 import dill
 from scipy.integrate import solve_ivp
@@ -50,10 +50,10 @@ def f_dyn(t, y, F):
 #%%
 # Import EOM functions
 
-f_FK = dill.load(open('f_FK','rb'))
-f_G = dill.load(open('f_G','rb'))
-f_B = dill.load(open('f_B','rb'))
-f_C = dill.load(open('f_C','rb'))
+f_FK = dill.load(open('./generated_functions/f_FK','rb'))
+f_G = dill.load(open('./generated_functions/f_G','rb'))
+f_B = dill.load(open('./generated_functions/f_B','rb'))
+f_C = dill.load(open('./generated_functions/f_C','rb'))
 
 #%%
 # Stiffness and damping
@@ -95,6 +95,7 @@ dq_0 = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
 #%%
 # Solve ODE
 
+# TODO - integration solver crashes just after 3.75s
 q_ev = solve_ivp(f_dyn, [0, 3.75], np.concatenate((q_0, dq_0)), method='BDF', args=(F,))
 
 # Old ODE solver
@@ -131,7 +132,7 @@ def animate(frame):
 ani = animation.FuncAnimation(fig, animate, len(t_reg), interval=1/60, blit=True)
 plt.show()
 
-# make animated evoluation plot
+# TODO
 # check if issues evalauting fk at -ve curvature?
-# trry without high stifffness on z - might be causing issue?
+# trry without high stifffness on z - might be causing issues?
 # %%
