@@ -6,11 +6,32 @@ import numpy as np
 from scipy import signal
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
-import dill
+
+#%%
+# For plotting multiple data in a normalised time window
+def plot_data(datas, t_s=0, t_f=1e3, datas2=None, ylims1=None, ylims2=None):
+    window = np.asarray((t_target >= t_s) & (t_target <= t_f)).nonzero()
+    fig, ax1 = plt.subplots()
+
+    for data in datas:
+        ax1.tick_params(axis='y', labelcolor='tab:blue')
+        ax1.plot(t_target[window], data[window], color='tab:blue')
+    if ylims1 is not None:
+        ax1.set_ylim(ylims1)
+
+    if datas2 is not None:
+        ax2 = ax1.twinx()
+        for data in datas2:
+            ax2.tick_params(axis='y', labelcolor='tab:orange')
+            ax2.plot(t_target[window], data[window],color='tab:orange')
+        if ylims2 is not None:
+            ax2.set_ylim(ylims2)
+
+    plt.show()
 
 #%%
 # Import csv data
-data_dir = './sine_x_fast' #./' + sys.argv[2]
+data_dir = './paramID_data/sine_x_fast' # + sys.argv[2]
 O_T_EE = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1)
 W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1)
 # Rescale timestamps to seconds since first msg
@@ -26,7 +47,7 @@ Z_meas = O_T_EE[:,15]
 RPY_meas = R.from_matrix(np.array([[O_T_EE[:,1], O_T_EE[:,2],O_T_EE[:,3]],
                                    [O_T_EE[:,5], O_T_EE[:,6],O_T_EE[:,7]],
                                    [O_T_EE[:,9], O_T_EE[:,10],O_T_EE[:,11]]]).T).as_euler('xyz', degrees=False)
-Phi_meas = RPY_meas[:,1] # TODO - check this was data that varies phi
+Phi_meas = RPY_meas[:,1] # TODO - check this with data that varies phi
 Fx_meas = W[:,1]
 Fz_meas = W[:,3]
 Ty_meas = W[:,5]
@@ -64,20 +85,27 @@ np.savez(data_dir + '/processed', t=t_target,
 
 #%%
 # Plot X
-# plt.plot(t_OTEE[100:170],X_meas[100:170])
+# plt.plot(t_target[120:200],X[120:200])
+# plt.title('X')
 # plt.show()
-# plt.plot(t_target[100:170],X[100:170])
+# plt.plot(t_W[380:620],Fx_meas[380:620])
+# plt.title('Fx')
+# plt.show()
+# plt.plot(t_target[100:170],Ty[100:170])
+# plt.title('Ty')
 # plt.show()
 # plt.plot(t_target[100:170],dX[100:170])
+# plt.title('dX')
 # plt.show()
 # plt.plot(t_target[100:170],ddX[100:170])
+# plt.title('ddX')
 # plt.show()
 
 #%%
-# Filtering test
+# # Filtering test
 # plt.plot(t_OTEE[100:170],X_meas[100:170])
 # plt.show()
-# sos = signal.butter(10, 10, fs=freq_target, output='sos', btype='lowpass')
+# sos = signal.butter(5, 8, fs=freq_target, output='sos', btype='lowpass')
 # X_filt = signal.sosfilt(sos, X)
 # plt.plot(t_target[100:170],X_filt[100:170])
 # plt.show()
@@ -87,3 +115,5 @@ np.savez(data_dir + '/processed', t=t_target,
 # ddX_filt = np.diff(dX_filt)/(1/30)
 # plt.plot(t_target[100:170],ddX_filt[100:170])
 # plt.show()
+
+# %%
