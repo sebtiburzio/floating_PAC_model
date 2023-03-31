@@ -53,7 +53,7 @@ def f_dyn(t, y, F):
 f_FK = dill.load(open('./generated_functions/f_FK','rb'))
 f_G = dill.load(open('./generated_functions/f_G','rb'))
 f_B = dill.load(open('./generated_functions/f_B','rb'))
-f_C = dill.load(open('./generated_functions/f_C','rb'))
+# f_C = dill.load(open('./generated_functions/f_C','rb'))
 
 #%%
 # Stiffness and damping

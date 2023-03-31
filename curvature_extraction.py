@@ -1,16 +1,33 @@
 #!/usr/bin/env python
 #%%
-
 import cv2
 import numpy as np
+import sympy as sm
+import dill
 import matplotlib.pyplot as plt
 
-def showim(img):
-    res = cv2.resize(img,None,fx=0.75, fy=0.75, interpolation = cv2.INTER_CUBIC)
+#%%
+# Shows image in pop up without crashing jupyter
+def showim(img): 
+    res = cv2.resize(img, None, fx=0.75, fy=0.75, interpolation = cv2.INTER_CUBIC)
     cv2.imshow('image',res)
     k = cv2.waitKey(0) & 0xFF
     if k == 27:         # wait for ESC key to exit
         cv2.destroyAllWindows()
+
+def find_curvature(theta_guess, fk_target, epsilon=0.01, max_iterations=1000):   #TODO - check more inputs
+    theta_est = None
+    for i in range(max_iterations):
+        error = np.vstack([f_FK_mid(theta_guess[0],theta_guess[1],p_vals),f_FK_end(theta_guess[0],theta_guess[1],p_vals)]).reshape([4,1]) - fk_target
+        if np.linalg.norm(error) < epsilon:
+            theta_est = theta_guess
+            break
+        else:
+            J = np.vstack([f_J_mid(theta_guess[0],theta_guess[1], p_vals),f_J_end(theta_guess[0],theta_guess[1], p_vals)]).squeeze()
+            theta_guess = theta_guess - np.linalg.pinv(J)@error
+    if theta_est is None:
+        print('Failed to converge')
+    return theta_est
 
 #%%
 img = cv2.imread('./paramID_data/sine_x_fast/images/1679419822965192813.jpg')
@@ -49,4 +66,19 @@ plt.ylim(0,1080)
 plt.show()
 
 showim(res)
+# %%
+# Curavture IK
+
+f_FK_mid = dill.load(open('./generated_functions/f_FK_mf','rb'))
+f_FK_end = dill.load(open('./generated_functions/f_FK_ef','rb'))
+f_J_mid = dill.load(open('./generated_functions/f_J_mf','rb'))
+f_J_end = dill.load(open('./generated_functions/f_J_ef','rb'))
+
+p_vals = [1.0, 9.81, 0.22, 0.024]
+
+# %%
+f_FK_mid(0.1,0.2, p_vals)
+f_FK_end(0.1,0.2, p_vals)
+f_J_mid(0.1,0.2, p_vals)
+f_J_end(0.1,0.2, p_vals)
 # %%
