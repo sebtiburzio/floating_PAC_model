@@ -1,4 +1,3 @@
-#%%
 #!/usr/bin/env python
 
 #%matplotlib ipympl
@@ -83,7 +82,7 @@ D = np.array([[b_o,        1/2*b_o,    0,      0,      0    ],
 # Set up
 
 # Parameters
-p_vals = [1.0, 9.81, 1.0, 0.1]
+p_vals = [1.0, 0.5, 1.0, 0.1]
 
 # Actuation
 F = np.zeros((5,))

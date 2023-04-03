@@ -8,23 +8,24 @@ import dill
 #%%
 # Init
 
-# constant parameters
-m, g, L, D = sm.symbols('m g L D')
-p = sm.Matrix([m, g, L, D])
+# Constant parameters
+m_L, m_E, L, D = sm.symbols('m_L m_E L D')  # m_L - total mass of cable, m_E - mass of weighted end
+p = sm.Matrix([m_L, m_E, L, D])
+num_masses = 2  # Number of masses to discretise along length (not including end mass)
 
-# configuration variables
+# Configuration variables
 theta_0, theta_1, x, z, phi = sm.symbols('theta_0 theta_1 x z phi')
 q = sm.Matrix([theta_0, theta_1, x, z, phi])
 theta = sm.Matrix([theta_0, theta_1])
 dtheta_0, dtheta_1, dx, dz, dphi = sm.symbols('dtheta_0 dtheta_1 dx dz dphi')
 dq = sm.Matrix([dtheta_0, dtheta_1, dx, dz, dphi])
 
-# object coordinates in global frame (forward kinematics)
+# Object coordinates in global frame (forward kinematics)
 fk_x, fk_z = sm.symbols('fk_x fk_z')
 fk = sm.Matrix([fk_x, fk_z])
 alpha = sm.symbols('alpha') # tip orientation in object base frame
 
-# integration variables
+# Integration variables
 s, v, d = sm.symbols('s v d')
 
 #%% 
@@ -65,11 +66,12 @@ dill.dump(f_J_ef, open("./generated_functions/f_J_ef", "wb"))
 tic = time.perf_counter()
 
 # Energy
-U_tip = 0.5*sm.integrate((fk[1].subs(s,1)),(d,-1/2,1/2)) # tip mass TODO - update for multiple masses on length and endpoint mass
-U_base = 0.5*sm.integrate((fk[1].subs(s,0)),(d,-1/2,1/2)) # base mass
+U = m_E*sm.integrate((fk[1].subs(s,1)),(d,-1/2,1/2))
+for i in range(num_masses):
+    U += (m_L/num_masses)*sm.integrate((fk[1].subs(s,i/num_masses)),(d,-1/2,1/2))
 
 # Potential force
-G = sm.Matrix([m*g*(U_base + U_tip)]).jacobian(q)
+G = sm.Matrix([9.81*(U)]).jacobian(q)
 
 toc = time.perf_counter()
 print("G gen time: " + str(toc-tic))
@@ -80,11 +82,11 @@ dill.dump(f_G, open("./generated_functions/f_G", "wb"))
 # Inertia matrix
 tic = time.perf_counter()
 
-J_tip = (fk.subs(s, 1)).jacobian(q) # mass at tip
-J_base = (fk.subs(s, 0)).jacobian(q) # mass at base
-
-B = 0.5*m*sm.integrate(J_tip.transpose()@J_tip, (d, -1/2, 1/2)) + \
-    0.5*m*sm.integrate(J_base.transpose()@J_base, (d, -1/2, 1/2))
+J = (fk.subs(s, 1)).jacobian(q)
+B = 0.5*m_E*sm.integrate(J.transpose()@J, (d, -1/2, 1/2))
+for i in range(num_masses):
+    J = (fk.subs(s, i/num_masses)).jacobian(q)
+    B += 0.5*(m_L/num_masses)*sm.integrate(J.transpose()@J, (d, -1.2, 1/2))
 
 toc = time.perf_counter()
 print("B gen time: " + str(toc-tic))

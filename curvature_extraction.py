@@ -74,11 +74,4 @@ f_FK_end = dill.load(open('./generated_functions/f_FK_ef','rb'))
 f_J_mid = dill.load(open('./generated_functions/f_J_mf','rb'))
 f_J_end = dill.load(open('./generated_functions/f_J_ef','rb'))
 
-p_vals = [1.0, 9.81, 1.0, 0.1]
-
-# %%
-f_FK_mid(0.1,0.2, p_vals)
-f_FK_end(0.1,0.2, p_vals)
-f_J_mid(0.1,0.2, p_vals)
-f_J_end(0.1,0.2, p_vals)
-# %%
+p_vals = [1.0, 0.5, 1.0, 0.1]
