@@ -18,13 +18,13 @@ def showim(img):
 def find_curvature(theta_guess, fk_target, epsilon=0.01, max_iterations=1000):   #TODO - check more inputs
     theta_est = None
     for i in range(max_iterations):
-        error = np.vstack([f_FK_mid(theta_guess[0],theta_guess[1],p_vals),f_FK_end(theta_guess[0],theta_guess[1],p_vals)]).reshape([4,1]) - fk_target
+        error = np.vstack([f_FK_mid(theta_guess,p_vals),f_FK_end(theta_guess,p_vals)]) - fk_target
         if np.linalg.norm(error) < epsilon:
             theta_est = theta_guess
             break
         else:
-            J = np.vstack([f_J_mid(theta_guess[0],theta_guess[1], p_vals),f_J_end(theta_guess[0],theta_guess[1], p_vals)]).squeeze()
-            theta_guess = theta_guess - np.linalg.pinv(J)@error
+            J = np.vstack([f_J_mid(theta_guess, p_vals),f_J_end(theta_guess, p_vals)])
+            theta_guess = theta_guess - (np.linalg.pinv(J)@error).squeeze()
     if theta_est is None:
         print('Failed to converge')
     return theta_est
@@ -74,7 +74,7 @@ f_FK_end = dill.load(open('./generated_functions/f_FK_ef','rb'))
 f_J_mid = dill.load(open('./generated_functions/f_J_mf','rb'))
 f_J_end = dill.load(open('./generated_functions/f_J_ef','rb'))
 
-p_vals = [1.0, 9.81, 0.22, 0.024]
+p_vals = [1.0, 9.81, 1.0, 0.1]
 
 # %%
 f_FK_mid(0.1,0.2, p_vals)
