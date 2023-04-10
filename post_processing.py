@@ -10,8 +10,10 @@ import matplotlib.pyplot as plt
 
 #%%
 # For plotting multiple data in a normalised time window
+# Pass data as a list of arrays (eg [X] or [X,Z])
+# Only works for data scaled to target sample rate
 def plot_data(datas, t_s=0, t_f=1e3, datas2=None, ylims1=None, ylims2=None):
-    window = np.asarray((t_target >= t_s) & (t_target <= t_f)).nonzero()
+    window = np.asarray((t_target >= t_s) & (t_target < t_f)).nonzero()
     fig, ax1 = plt.subplots()
 
     for data in datas:
@@ -45,13 +47,15 @@ def find_curvature(theta_guess, fk_target, epsilon=0.01, max_iterations=1000):  
 
 #%%
 # Import csv data
-data_dir = './paramID_data/sine_x_fast' # + sys.argv[2]
+data_dir = './paramID_data/0406/sine_x_w_depth' # + sys.argv[2]
 O_T_EE = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1)
+markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows=1)
 W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1)
 # Rescale timestamps to seconds since first msg
-timestamp_begin = np.min([np.min(O_T_EE[:,0]), np.min(W[:,0])])
-timestamp_end = np.min([np.max(O_T_EE[:,0]), np.max(W[:,0])])
+timestamp_begin = np.max([np.min(O_T_EE[:,0]), np.min(markers[:,0]), np.min(W[:,0])])
+timestamp_end = np.min([np.max(O_T_EE[:,0]), np.max(markers[:,0]), np.max(W[:,0])])
 t_OTEE = (O_T_EE[:,0]-timestamp_begin)/1e9
+t_markers = (markers[:,0]-timestamp_begin)/1e9
 t_W = (W[:,0]-timestamp_begin)/1e9
 t_end = (timestamp_end - timestamp_begin)/1e9
 
@@ -61,7 +65,11 @@ Z_meas = O_T_EE[:,15]
 RPY_meas = R.from_matrix(np.array([[O_T_EE[:,1], O_T_EE[:,2],O_T_EE[:,3]],
                                    [O_T_EE[:,5], O_T_EE[:,6],O_T_EE[:,7]],
                                    [O_T_EE[:,9], O_T_EE[:,10],O_T_EE[:,11]]]).T).as_euler('xyz', degrees=False)
-Phi_meas = RPY_meas[:,1] # TODO - check this with data that varies phi
+Phi_meas = RPY_meas[:,1] # TODO - check this with data that varies phi\
+X_mid_meas = markers[:,1]
+Z_mid_meas = markers[:,2]
+X_end_meas = markers[:,3]
+Z_end_meas = markers[:,4]
 Fx_meas = W[:,1]
 Fz_meas = W[:,3]
 Ty_meas = W[:,5]
@@ -72,6 +80,10 @@ t_target = np.arange(0, t_end, 1/freq_target)
 X = np.interp(t_target, t_OTEE, X_meas)
 Z = np.interp(t_target, t_OTEE, Z_meas)
 Phi = np.interp(t_target, t_OTEE, Phi_meas)
+X_mid = np.interp(t_target, t_markers, X_mid_meas)
+Z_mid = np.interp(t_target, t_markers, Z_mid_meas)
+X_end = np.interp(t_target, t_markers, X_end_meas)
+Z_end = np.interp(t_target, t_markers, Z_end_meas)
 # Resample other data rates
 t_90Hz = np.arange(0, t_end, 1/90)  # TODO interpolating 100Hz to 90Hz ok?
 Fx_90Hz = np.interp(t_90Hz, t_W, Fx_meas)
@@ -82,6 +94,11 @@ Fz = signal.decimate(Fz_90Hz, 3)
 Ty = signal.decimate(Ty_90Hz, 3)
 
 #%%
+# Transform to base frame (subtract X/Z rotate phi)
+fk_targets = np.array([X_mid-X,Z_mid-Z,X_end-X,Z_end-Z])
+# need to add/subtract pi/2 to align model axis with robot frame?
+
+# Extract curvature - initial guess close to zero, subsequent guess is previous estimate
 # Curavture IK
 f_FK_mid = dill.load(open('./generated_functions/f_FK_mf','rb'))
 f_FK_end = dill.load(open('./generated_functions/f_FK_ef','rb'))

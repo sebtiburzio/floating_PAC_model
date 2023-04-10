@@ -36,8 +36,8 @@ def plot_markers(idx, plot_mask=False):
         ax.plot(end_mask_pixels[idx][1],end_mask_pixels[idx][0],',',c='lightskyblue')
 
     ax.imshow(np.asarray(img))
-    ax.plot(np.array(mid_positions_px)[idx,1],np.array(mid_positions_px)[idx,0],ms=2,fillstyle='none',marker='o',mec=marker_colors[0])
-    ax.plot(np.array(end_positions_px)[idx,1],np.array(end_positions_px)[idx,0],ms=2,fillstyle='none',marker='o',mec=marker_colors[1])
+    ax.plot(mid_positions_px[idx,1],mid_positions_px[idx,0],ms=2,fillstyle='none',marker='o',mec=marker_colors[0])
+    ax.plot(end_positions_px[idx,1],end_positions_px[idx,0],ms=2,fillstyle='none',marker='o',mec=marker_colors[1])
     # ax.scatter(np.array(mid_positions_px)[-1,1],np.array(mid_positions_px)[-1,0],s=10,c='None',marker='o',edgecolors='lawngreen')
     # ax.scatter(np.array(end_positions_px)[-1,1],np.array(end_positions_px)[-1,0],s=10,c='None',marker='o',edgecolors='skyblue')
 
@@ -57,11 +57,11 @@ def px_to_space(u,v):
     rhs1 = np.vstack([rhs1, np.array([0,1,0,0])])   # Intersect Y=0 plane
     rhs2 = np.reshape(np.hstack([-P[:,3],[0]]),(4,1))
     sol = np.linalg.inv(rhs1)@rhs2
-    return sol[:3]/sol[3]
+    return sol[:3]
 
 #%%
 # Process each image in folder
-img_folder = './paramID_data/0406/sine_x_w_depth/images_subset/'
+img_folder = './paramID_data/0406/sine_x_w_depth/images/'
 
 mid_positions_px = []
 end_positions_px = []
@@ -120,6 +120,10 @@ for img_name in os.listdir(img_folder):
     end_mask_pixels.append(np.where(masked_B[:,:,0] > 0))
     marker_ts.append(img_name[:-4])
 
+mid_positions_px = np.array(mid_positions_px)
+end_positions_px = np.array(end_positions_px)
+mid_positions_3D = np.array(mid_positions_3D)
+end_positions_3D = np.array(end_positions_3D)
 t_markers = np.array(marker_ts, dtype=np.float64)
 t_markers = (t_markers - t_markers[0])/1e9
 
@@ -130,16 +134,8 @@ with open(img_folder + '../marker_positions.csv', 'w', newline='') as csvfile:
     writer.writerow(['ts', 'mid_pos_x', 'mid_pos_z', 'end_pos_x', 'end_pos_z'])
     for n in range(len(marker_ts)):
         writer.writerow([marker_ts[n], 
-                         float(mid_positions_3D[n][0]), float(mid_positions_3D[n][2]), 
-                         float(end_positions_3D[n][0]), float(end_positions_3D[n][2])])
-#%%
-# Interpolate sample times
-
-# Transform to base frame (substract X/Z rotate phi)
-# Extract curvature - initial guess close to zero, subsequent guess is previous estimate
-
-# Filtering? (or filter before curvature extraction?)
-# Calculate derivatives
+                         float(mid_positions_3D[n,0]), float(mid_positions_3D[n,2]), 
+                         float(end_positions_3D[n,0]), float(end_positions_3D[n,2])])
 
 #%%
 # Animated plot (requires %matplotlib ipympl) TODO - crashes after a while (ipympl)
