@@ -2,12 +2,12 @@
 #%%
 import os
 import cv2
+import csv
 import numpy as np
-import sympy as sm
-import dill
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from scipy.ndimage import center_of_mass
+from scipy.spatial.transform import Rotation as R
 
 #%%
 # Shows image in pop up without crashing jupyter
@@ -41,18 +41,23 @@ def plot_markers(idx, plot_mask=False):
     # ax.scatter(np.array(mid_positions_px)[-1,1],np.array(mid_positions_px)[-1,0],s=10,c='None',marker='o',edgecolors='lawngreen')
     # ax.scatter(np.array(end_positions_px)[-1,1],np.array(end_positions_px)[-1,0],s=10,c='None',marker='o',edgecolors='skyblue')
 
-def find_curvature(theta_guess, fk_target, epsilon=0.01, max_iterations=1000):   #TODO - check more inputs
-    theta_est = None
-    for i in range(max_iterations):
-        error = np.vstack([f_FK_mid(theta_guess,p_vals),f_FK_end(theta_guess,p_vals)]) - fk_target
-        if np.linalg.norm(error) < epsilon:
-            theta_est = theta_guess
-            break
-        else:
-            J = np.vstack([f_J_mid(theta_guess, p_vals),f_J_end(theta_guess, p_vals)])
-    if theta_est is None:
-        print('Failed to converge')
-    return theta_est
+#%%
+# Camera intrinsic and extrinsic transforms
+# K matrix (TODO - read from camera info.txt)
+K_cam = np.array([[1365.853271484375, 0.0, 975.876708984375], 
+                  [0.0, 1365.0545654296875, 559.9922485351562], 
+                  [0.0, 0.0, 1.0]])
+R_cam = R.from_quat([0.523796, 0.6114, -0.381026, 0.454584]).as_matrix() # cam to base frame # TODO - import from calib file
+T_cam = np.array([[0.292646],[0.606908],[0.5813980]])
+E_cam = np.hstack([R_cam.T, -R_cam.T@T_cam]) # base to cam frame
+P = K_cam@E_cam
+
+def px_to_space(u,v):
+    rhs1 = np.hstack([P[:,:3],np.array([[-u,-v,-1]]).T])
+    rhs1 = np.vstack([rhs1, np.array([0,1,0,0])])   # Intersect Y=0 plane
+    rhs2 = np.reshape(np.hstack([-P[:,3],[0]]),(4,1))
+    sol = np.linalg.inv(rhs1)@rhs2
+    return sol[:3]/sol[3]
 
 #%%
 # Process each image in folder
@@ -60,15 +65,17 @@ img_folder = './paramID_data/0406/sine_x_w_depth/images_subset/'
 
 mid_positions_px = []
 end_positions_px = []
+mid_positions_3D = []
+end_positions_3D = []
 mid_mask_pixels = []
 end_mask_pixels = []
 marker_ts = []
 
+# Mask range for green and blue markers
 lower_G = np.array([25,64,30])
 upper_G = np.array([85,255,255])
 lower_B = np.array([85,64,30])
 upper_B = np.array([135,255,255])
-criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
 
 for img_name in os.listdir(img_folder):
     img = cv2.imread(img_folder + img_name)
@@ -88,8 +95,7 @@ for img_name in os.listdir(img_folder):
     mask_G = cv2.morphologyEx(mask_G, cv2.MORPH_CLOSE, np.ones((5,5)))
     mask_B = cv2.morphologyEx(mask_B, cv2.MORPH_OPEN, np.ones((5,5)))
     mask_B = cv2.morphologyEx(mask_B, cv2.MORPH_CLOSE, np.ones((5,5)))
-
-    # Remove noise from mask
+    # Remove noise from mask TODO - is this here twice on purpose?
     mask_G = cv2.morphologyEx(mask_G, cv2.MORPH_OPEN, np.ones((5,5)))
     mask_G = cv2.morphologyEx(mask_G, cv2.MORPH_CLOSE, np.ones((5,5)))
     mask_B = cv2.morphologyEx(mask_B, cv2.MORPH_OPEN, np.ones((5,5)))
@@ -99,8 +105,17 @@ for img_name in os.listdir(img_folder):
     masked_G = cv2.bitwise_and(img,img,mask=mask_G)
     masked_B = cv2.bitwise_and(img,img,mask=mask_B)
 
-    mid_positions_px.append(center_of_mass(mask_G))
-    end_positions_px.append(center_of_mass(mask_B))
+    # Locate markers at COM of mask
+    mid_pos_px = center_of_mass(mask_G)
+    end_pos_px = center_of_mass(mask_B)
+    # Convert px location to 3D, assuming on Y=0 plane
+    mid_pos_3D = px_to_space(mid_pos_px[1],mid_pos_px[0])
+    end_pos_3D = px_to_space(end_pos_px[1],end_pos_px[0])
+
+    mid_positions_px.append(mid_pos_px)
+    end_positions_px.append(end_pos_px)
+    mid_positions_3D.append(mid_pos_3D)
+    end_positions_3D.append(end_pos_3D)
     mid_mask_pixels.append(np.where(masked_G[:,:,0] > 0))
     end_mask_pixels.append(np.where(masked_B[:,:,0] > 0))
     marker_ts.append(img_name[:-4])
@@ -108,13 +123,21 @@ for img_name in os.listdir(img_folder):
 t_markers = np.array(marker_ts, dtype=np.float64)
 t_markers = (t_markers - t_markers[0])/1e9
 
-# Convert pixels to space
-# Animated plot of marker positions to check realistic?
+#%%
+# Export to csv
+with open(img_folder + '../marker_positions.csv', 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile, delimiter=',')
+    writer.writerow(['ts', 'mid_pos_x', 'mid_pos_z', 'end_pos_x', 'end_pos_z'])
+    for n in range(len(marker_ts)):
+        writer.writerow([marker_ts[n], 
+                         float(mid_positions_3D[n][0]), float(mid_positions_3D[n][2]), 
+                         float(end_positions_3D[n][0]), float(end_positions_3D[n][2])])
+#%%
+# Interpolate sample times
 
 # Transform to base frame (substract X/Z rotate phi)
 # Extract curvature - initial guess close to zero, subsequent guess is previous estimate
 
-# Interpolate sample times
 # Filtering? (or filter before curvature extraction?)
 # Calculate derivatives
 
@@ -137,16 +160,6 @@ def animate(frame):
 
 ani = animation.FuncAnimation(fig, animate, len(mid_positions_px), interval=1000/30, blit=True)
 plt.show()
-
-#%%
-# Curavture IK
-
-f_FK_mid = dill.load(open('./generated_functions/f_FK_mf','rb'))
-f_FK_end = dill.load(open('./generated_functions/f_FK_ef','rb'))
-f_J_mid = dill.load(open('./generated_functions/f_J_mf','rb'))
-f_J_end = dill.load(open('./generated_functions/f_J_ef','rb'))
-
-p_vals = [1.0, 0.5, 1.0, 0.1]
 
 #%%
 # For multiple points

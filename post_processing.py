@@ -2,6 +2,7 @@
 #%%
 
 import sys
+import dill
 import numpy as np
 from scipy import signal
 from scipy.spatial.transform import Rotation as R
@@ -28,6 +29,19 @@ def plot_data(datas, t_s=0, t_f=1e3, datas2=None, ylims1=None, ylims2=None):
             ax2.set_ylim(ylims2)
 
     plt.show()
+
+def find_curvature(theta_guess, fk_target, epsilon=0.01, max_iterations=1000):   #TODO - check more inputs
+    theta_est = None
+    for i in range(max_iterations):
+        error = np.vstack([f_FK_mid(theta_guess,p_vals),f_FK_end(theta_guess,p_vals)]) - fk_target
+        if np.linalg.norm(error) < epsilon:
+            theta_est = theta_guess
+            break
+        else:
+            J = np.vstack([f_J_mid(theta_guess, p_vals),f_J_end(theta_guess, p_vals)])
+    if theta_est is None:
+        print('Failed to converge')
+    return theta_est
 
 #%%
 # Import csv data
@@ -66,6 +80,15 @@ Ty_90Hz = np.interp(t_90Hz, t_W, Ty_meas)
 Fx = signal.decimate(Fx_90Hz, 3)   # Downsample to 30Hz
 Fz = signal.decimate(Fz_90Hz, 3)
 Ty = signal.decimate(Ty_90Hz, 3)
+
+#%%
+# Curavture IK
+f_FK_mid = dill.load(open('./generated_functions/f_FK_mf','rb'))
+f_FK_end = dill.load(open('./generated_functions/f_FK_ef','rb'))
+f_J_mid = dill.load(open('./generated_functions/f_J_mf','rb'))
+f_J_end = dill.load(open('./generated_functions/f_J_ef','rb'))
+
+p_vals = [1.0, 0.5, 1.0, 0.1]
 
 #%%
 # Finite difference derivatives 
