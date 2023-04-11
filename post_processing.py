@@ -4,6 +4,7 @@
 import sys
 import dill
 import numpy as np
+import mpmath as mp
 from scipy import signal
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
@@ -32,17 +33,21 @@ def plot_data(datas, t_s=0, t_f=1e3, datas2=None, ylims1=None, ylims2=None):
 
     plt.show()
 
-def find_curvature(theta_guess, fk_target, epsilon=0.01, max_iterations=1000):   #TODO - check more inputs
+def find_curvature(theta_guess, fk_target, epsilon=0.01, max_iterations=1000):   # TODO - fix horrific conversions between mp and np
     theta_est = None
     for i in range(max_iterations):
-        error = np.vstack([f_FK_mid(theta_guess,p_vals),f_FK_end(theta_guess,p_vals)]) - fk_target
+        error = np.vstack([np.array(f_FK_mid(theta_guess,p_vals).apply(mp.re).tolist(),dtype=float),
+                           np.array(f_FK_end(theta_guess,p_vals).apply(mp.re).tolist(),dtype=float)]) - fk_target.reshape(4,1)
         if np.linalg.norm(error) < epsilon:
             theta_est = theta_guess
             break
         else:
-            J = np.vstack([f_J_mid(theta_guess, p_vals),f_J_end(theta_guess, p_vals)])
+            J = np.vstack([np.array(f_J_mid(theta_guess, p_vals).apply(mp.re).tolist(),dtype=float),
+                           np.array(f_J_end(theta_guess, p_vals).apply(mp.re).tolist(),dtype=float)])
+            theta_guess = theta_guess - (np.linalg.pinv(J)@error).squeeze()
     if theta_est is None:
-        print('Failed to converge')
+        print('Failed to converge\n')
+        theta_est = np.array([np.nan, np.nan])
     return theta_est
 
 #%%
@@ -65,7 +70,7 @@ Z_meas = O_T_EE[:,15]
 RPY_meas = R.from_matrix(np.array([[O_T_EE[:,1], O_T_EE[:,2],O_T_EE[:,3]],
                                    [O_T_EE[:,5], O_T_EE[:,6],O_T_EE[:,7]],
                                    [O_T_EE[:,9], O_T_EE[:,10],O_T_EE[:,11]]]).T).as_euler('xyz', degrees=False)
-Phi_meas = RPY_meas[:,1] # TODO - check this with data that varies phi\
+Phi_meas = RPY_meas[:,1] # TODO - check this with data that varies phi
 X_mid_meas = markers[:,1]
 Z_mid_meas = markers[:,2]
 X_end_meas = markers[:,3]
@@ -95,17 +100,67 @@ Ty = signal.decimate(Ty_90Hz, 3)
 
 #%%
 # Transform to base frame (subtract X/Z rotate phi)
-fk_targets = np.array([X_mid-X,Z_mid-Z,X_end-X,Z_end-Z])
-# need to add/subtract pi/2 to align model axis with robot frame?
+fk_targets = np.array([X_mid-X,Z_mid-Z,X_end-X,Z_end-Z]).T
+# TODO - need to rotate by phi when orientation changes
+# TODO - need to add/subtract pi/2 to align model axis with robot frame?
 
-# Extract curvature - initial guess close to zero, subsequent guess is previous estimate
-# Curavture IK
-f_FK_mid = dill.load(open('./generated_functions/f_FK_mf','rb'))
-f_FK_end = dill.load(open('./generated_functions/f_FK_ef','rb'))
-f_J_mid = dill.load(open('./generated_functions/f_J_mf','rb'))
-f_J_end = dill.load(open('./generated_functions/f_J_ef','rb'))
+###
+def plot_FK(q_repl):
+    s_evals = np.linspace(0,1,11)
+    FK_evals = np.empty((s_evals.size,2,))
+    FK_evals[:] = np.nan
+    for i_s in range(s_evals.size):
+       FK_evals[i_s] = f_FK(q_repl,p_vals,s_evals[i_s],0.0)
+    fig, ax = plt.subplots()
+    ax.plot(FK_evals[:,0],FK_evals[:,1])
+    plt.xlim(FK_evals[0,0]-0.8,FK_evals[0,0]+0.8)
+    plt.ylim(FK_evals[0,1]-0.8,FK_evals[0,1]+0.2)
+    fig.set_figwidth(8)
+    ax.set_aspect('equal','box')
+    plt.show()
+# Loading functions not working, so redfine here for now
+import sympy as sm
+# Constant parameters
+L, D = sm.symbols('L D')  # m_L - total mass of cable, m_E - mass of weighted end
+p = sm.Matrix([L, D])
+p_vals = [0.75, 0.01]
+# Configuration variables
+theta_0, theta_1= sm.symbols('theta_0 theta_1')
+theta = sm.Matrix([theta_0, theta_1])
+# Object coordinates
+fk_x, fk_z = sm.symbols('fk_x fk_z')
+fk = sm.Matrix([fk_x, fk_z])
+alpha = sm.symbols('alpha') # tip orientation in object base frame
+# Integration variables
+s, v, d = sm.symbols('s v d')
+# Spine x,z in object base frame
+alpha = theta_0*v + 0.5*theta_1*v**2
+fk[0] = L*sm.integrate(sm.sin(alpha),(v, 0, s))
+fk[1] = -L*sm.integrate(sm.cos(alpha),(v, 0, s)) # TODO - recheck all frames etc to make model match robot...
+# FK of midpoint and endpoint in base frame (for curvature IK)
+fk_mid_fixed = fk.subs(s, 0.5)
+fk_end_fixed = fk.subs(s, 1)
+J_mid_fixed = fk_mid_fixed.jacobian(sm.Matrix([theta_0, theta_1]))
+J_end_fixed = fk_end_fixed.jacobian(sm.Matrix([theta_0, theta_1]))
+f_FK_mid = sm.lambdify((theta,p), fk_mid_fixed, "mpmath")
+f_FK_end = sm.lambdify((theta,p), fk_end_fixed, "mpmath")
+f_J_mid = sm.lambdify((theta,p), J_mid_fixed, "mpmath")
+f_J_end = sm.lambdify((theta,p), J_end_fixed, "mpmath")
+# Full FK for plotting
+f_FK = sm.lambdify((theta,p,s,d), fk, "mpmath")
+###
 
-p_vals = [1.0, 0.5, 1.0, 0.1]
+theta_extracted = np.empty((fk_targets.shape[0],2,))
+theta_guess = np.array([1e-3, 1e-3])
+#%%
+for n in range(100): #range(fk_targets.shape[0]):
+    print(n)
+    theta_n = find_curvature(theta_guess, fk_targets[n,:])
+    theta_extracted[n,:] = theta_n
+    if np.isnan(theta_n).any():
+        print('Failed to converge for sample' + str(n))
+    else:
+        theta_guess = theta_n
 
 #%%
 # Finite difference derivatives 
