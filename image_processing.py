@@ -18,7 +18,7 @@ def showim(img):
     if k == 27:         # wait for ESC key to exit
         cv2.destroyAllWindows()
 
-def plot_markers(idx, plot_mask=False):
+def plot_markers(idx, plot_mask=False, save=False):
     img_name = os.listdir(img_folder)[idx]
     img = cv2.cvtColor(cv2.imread(img_folder + img_name), cv2.COLOR_BGR2RGB)
 
@@ -35,11 +35,14 @@ def plot_markers(idx, plot_mask=False):
         ax.plot(mid_mask_pixels[idx][1],mid_mask_pixels[idx][0],',',c='palegreen')
         ax.plot(end_mask_pixels[idx][1],end_mask_pixels[idx][0],',',c='lightskyblue')
 
-    ax.imshow(np.asarray(img))
+    ax.imshow(np.asarray(img)) # TODO - way to make this not display when saving?
     ax.plot(mid_positions_px[idx,1],mid_positions_px[idx,0],ms=2,fillstyle='none',marker='o',mec=marker_colors[0])
     ax.plot(end_positions_px[idx,1],end_positions_px[idx,0],ms=2,fillstyle='none',marker='o',mec=marker_colors[1])
-    # ax.scatter(np.array(mid_positions_px)[-1,1],np.array(mid_positions_px)[-1,0],s=10,c='None',marker='o',edgecolors='lawngreen')
-    # ax.scatter(np.array(end_positions_px)[-1,1],np.array(end_positions_px)[-1,0],s=10,c='None',marker='o',edgecolors='skyblue')
+    
+    if save:
+        if not os.path.exists(img_folder + 'detections'):
+            os.makedirs(img_folder + 'detections')
+        plt.savefig(img_folder + '/detections/' + img_name[:-4] + '_d.png', bbox_inches='tight', pad_inches=0.1)
 
 #%%
 # Camera intrinsic and extrinsic transforms
@@ -61,7 +64,7 @@ def px_to_space(u,v):
 
 #%%
 # Process each image in folder
-img_folder = './paramID_data/0406/sine_x_w_depth/images/'
+img_folder = './paramID_data/0406/sine_x_w_depth/images_subset/'
 
 mid_positions_px = []
 end_positions_px = []
