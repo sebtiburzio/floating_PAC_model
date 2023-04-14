@@ -32,10 +32,10 @@ s, v, d = sm.symbols('s v d')
 # Forward Kinematics
 tic = time.perf_counter()
 
-# Spine x,z in object base frame
-alpha = theta_0*v + 0.5*theta_1*v**2
-fk[0] = L*sm.integrate(sm.cos(alpha),(v, 0, s))
-fk[1] = -L*sm.integrate(sm.sin(alpha),(v, 0, s)) # -ve to match rotation sense in robot frame
+# Spine x,z in object base frame, defined as if it was reflected in the robot XY plane
+alpha = -(theta_0*v + 0.5*theta_1*v**2) # negative curvature so sense matches robot frame Y axis rotation
+fk[0] = L*sm.integrate(sm.sin(alpha),(v, 0, s)) # x. when theta=0, x=0.
+fk[1] = -L*sm.integrate(sm.cos(alpha),(v, 0, s)) # z. when theta=0, z=-L. 
 
 # FK of midpoint and endpoint in base frame (for curvature IK)
 fk_mid_fixed = fk.subs(s, 0.5)
@@ -44,8 +44,8 @@ J_mid_fixed = fk_mid_fixed.jacobian(sm.Matrix([theta_0, theta_1]))
 J_end_fixed = fk_end_fixed.jacobian(sm.Matrix([theta_0, theta_1]))
 
 # 3DOF floating base
-rot_phi = sm.rot_axis3(phi)[:2,:2]                  # +ve rotations around robot Y-axis
-rot_alpha = sm.rot_axis3(alpha.subs(v,s))[:2,:2]    #
+rot_phi = sm.rot_axis3(phi)[:2,:2]                  # +ve rotations around robot base Y axis
+rot_alpha = sm.rot_axis3(alpha.subs(v,s))[:2,:2]    # TODO - check actual franka_state orientation sign
 fk = sm.Matrix([x, z]) + rot_phi@(fk + D*rot_alpha@sm.Matrix([0, d]))
 
 toc = time.perf_counter()
@@ -67,7 +67,7 @@ f_J_ef = sm.lambdify((theta,p), J_end_fixed, "mpmath")
 tic = time.perf_counter()
 
 # Energy
-U = m_E*sm.integrate((fk[1].subs(s,1)),(d,-1/2,1/2))
+U = m_E*sm.integrate((fk[1].subs(s,1)),(d,-1/2,1/2)) # TODO - check if defintion needs to change due to coordinate change?
 for i in range(num_masses):
     U += (m_L/num_masses)*sm.integrate((fk[1].subs(s,i/num_masses)),(d,-1/2,1/2))
 
@@ -76,9 +76,9 @@ G = sm.Matrix([9.81*(U)]).jacobian(q)
 
 toc = time.perf_counter()
 print("G gen time: " + str(toc-tic))
+
 pickle.dump(G, open("./generated_functions/G", "wb"))
 f_G = sm.lambdify((q,p), G, "mpmath")
-
 
 #%% 
 # Inertia matrix
@@ -92,6 +92,7 @@ for i in range(num_masses):
 
 toc = time.perf_counter()
 print("B gen time: " + str(toc-tic))
+
 pickle.dump(B, open("./generated_functions/B", "wb"))
 f_B = sm.lambdify((q,p), B, "mpmath")
 
@@ -108,6 +109,7 @@ f_B = sm.lambdify((q,p), B, "mpmath")
 
 # toc = time.perf_counter()
 # print("C gen time: " + str(toc-tic))
+
 # pickle.dump(C, open("C", "wb"))
 # f_C = sm.lambdify((q,p,dq), C, "mpmath")
 
