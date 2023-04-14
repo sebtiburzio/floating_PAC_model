@@ -5,10 +5,10 @@ import sys
 import pickle
 import numpy as np
 import mpmath as mp
+import sympy as sm
 from scipy import signal
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
-import sympy as sm
 
 #%%
 # For plotting multiple data in a normalised time window
@@ -34,7 +34,7 @@ def plot_data(datas, t_s=0, t_f=1e3, datas2=None, ylims1=None, ylims2=None):
 
     plt.show()
 
-def find_curvature(theta_guess, fk_target, epsilon=0.01, max_iterations=1000):   # TODO - fix horrific conversions between mp and np
+def find_curvature(theta_guess, fk_target, epsilon=0.05, max_iterations=25):   # TODO - fix horrific conversions between mp and np
     theta_est = None
     for i in range(max_iterations):
         error = np.vstack([np.array(f_FK_mid(theta_guess,p_vals).apply(mp.re).tolist(),dtype=float),
@@ -45,7 +45,7 @@ def find_curvature(theta_guess, fk_target, epsilon=0.01, max_iterations=1000):  
         else:
             J = np.vstack([np.array(f_J_mid(theta_guess, p_vals).apply(mp.re).tolist(),dtype=float),
                            np.array(f_J_end(theta_guess, p_vals).apply(mp.re).tolist(),dtype=float)])
-            theta_guess = theta_guess - (np.linalg.pinv(J)@error).squeeze()
+            theta_guess = theta_guess - (np.linalg.pinv(J)@error).squeeze() # TODO - add step size
     if theta_est is None:
         print('Failed to converge\n')
         theta_est = np.array([np.nan, np.nan])
@@ -71,7 +71,7 @@ Z_meas = O_T_EE[:,15]
 RPY_meas = R.from_matrix(np.array([[O_T_EE[:,1], O_T_EE[:,2],O_T_EE[:,3]],
                                    [O_T_EE[:,5], O_T_EE[:,6],O_T_EE[:,7]],
                                    [O_T_EE[:,9], O_T_EE[:,10],O_T_EE[:,11]]]).T).as_euler('xyz', degrees=False)
-Phi_meas = RPY_meas[:,1] # TODO - check this with data that varies phi
+Phi_meas = RPY_meas[:,1] # TODO - check sign of this with data that varies phi
 X_mid_meas = markers[:,1]
 Z_mid_meas = markers[:,2]
 X_end_meas = markers[:,3]
@@ -84,8 +84,8 @@ Ty_meas = W[:,5]
 freq_target = 30
 t_target = np.arange(0, t_end, 1/freq_target)
 X = np.interp(t_target, t_OTEE, X_meas)
-Z = np.interp(t_target, t_OTEE, Z_meas)
-Phi = np.interp(t_target, t_OTEE, Phi_meas)
+Z = np.interp(t_target, t_OTEE, Z_meas) # TODO define offset from EE to object base
+Phi = np.interp(t_target, t_OTEE, Phi_meas) # TODO - check if interpolation ok here
 X_mid = np.interp(t_target, t_markers, X_mid_meas)
 Z_mid = np.interp(t_target, t_markers, Z_mid_meas)
 X_end = np.interp(t_target, t_markers, X_end_meas)
@@ -100,10 +100,13 @@ Fz = signal.decimate(Fz_90Hz, 3)
 Ty = signal.decimate(Ty_90Hz, 3)
 
 #%%
-# Transform to base frame (subtract X/Z rotate phi)
-fk_targets = np.array([X_mid-X,Z_mid-Z,X_end-X,Z_end-Z]).T
-# TODO - need to rotate by phi when orientation changes
-# TODO - need to add/subtract pi/2 to align model axis with robot frame?
+# Transform marker points to fixed PAC frame (subtract X/Z rotate phi)
+fk_targets_mid = np.hstack([np.array([X_mid-X+0.006,Z_mid-Z+0.01]).T, np.ones((X_mid.size,1))]) # TODO formalise offset from EE Z frame
+fk_targets_end = np.hstack([np.array([X_end-X+0.006,Z_end-Z+0.01]).T, np.ones((X_end.size,1))]) # Also detecting/improving offset due to camera calib?
+R_Phi = R.from_euler('y', -Phi, degrees=False).as_matrix() # TODO - check rotation direction with larger rot
+fk_targets_mid = np.einsum('ijk,ik->ij', R_Phi, fk_targets_mid)
+fk_targets_end = np.einsum('ijk,ik->ij', R_Phi, fk_targets_end)
+fk_targets = np.hstack([fk_targets_mid[:,:2], fk_targets_end[:,:2]])
 
 ###
 def plot_FK(q_repl):
@@ -117,12 +120,13 @@ def plot_FK(q_repl):
     plt.xlim(FK_evals[0,0]-0.8,FK_evals[0,0]+0.8)
     plt.ylim(FK_evals[0,1]-0.8,FK_evals[0,1]+0.2)
     ## MANUALLY ADD TARGETS TO PLOT
-    ax.scatter(fk_targets[66,0], fk_targets[66,1])
-    ax.scatter(fk_targets[66,2], fk_targets[66,3])
+    ax.scatter(fk_targets[n,0], fk_targets[n,1])
+    ax.scatter(fk_targets[n,2], fk_targets[n,3])
     ## DONT FORGET TO REMOVE
     fig.set_figwidth(8)
     ax.set_aspect('equal','box')
     plt.show()
+###
 
 # Import forward kinematics
 # Constant parameters
@@ -141,7 +145,6 @@ f_FK_end = sm.lambdify((theta,p), pickle.load(open("./generated_functions/fk_end
 f_J_mid = sm.lambdify((theta,p), pickle.load(open("./generated_functions/J_mid_fixed", "rb")), "mpmath")
 f_J_end = sm.lambdify((theta,p), pickle.load(open("./generated_functions/J_end_fixed", "rb")), "mpmath")
 f_FK = sm.lambdify((q,p,s,d), pickle.load(open("./generated_functions/fk", "rb")), "mpmath")
-###
 
 theta_extracted = np.empty((fk_targets.shape[0],2,))
 theta_guess = np.array([1e-3, 1e-3])
@@ -166,10 +169,10 @@ ddPhi = np.diff(dPhi)/(1/freq_target)
 
 #%%
 # Save data
-np.savez(data_dir + '/processed', t=t_target, 
-         X=X, Z=Z, Phi=Phi, Fx=Fx, Fz=Fz, Ty=Ty, 
-         dX=dX, ddX=ddX, dZ=dZ, 
-         ddZ=ddZ, dPhi=dPhi, ddPhi=ddPhi)
+# np.savez(data_dir + '/processed', t=t_target, 
+#          X=X, Z=Z, Phi=Phi, Fx=Fx, Fz=Fz, Ty=Ty, 
+#          dX=dX, ddX=ddX, dZ=dZ, 
+#          ddZ=ddZ, dPhi=dPhi, ddPhi=ddPhi)
 
 #%%
 # Plotting examples
