@@ -2,12 +2,13 @@
 #%%
 
 import sys
-import dill
+import pickle
 import numpy as np
 import mpmath as mp
 from scipy import signal
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
+import sympy as sm
 
 #%%
 # For plotting multiple data in a normalised time window
@@ -115,39 +116,31 @@ def plot_FK(q_repl):
     ax.plot(FK_evals[:,0],FK_evals[:,1])
     plt.xlim(FK_evals[0,0]-0.8,FK_evals[0,0]+0.8)
     plt.ylim(FK_evals[0,1]-0.8,FK_evals[0,1]+0.2)
+    ## MANUALLY ADD TARGETS TO PLOT
+    ax.scatter(fk_targets[66,0], fk_targets[66,1])
+    ax.scatter(fk_targets[66,2], fk_targets[66,3])
+    ## DONT FORGET TO REMOVE
     fig.set_figwidth(8)
     ax.set_aspect('equal','box')
     plt.show()
-# Loading functions not working, so redfine here for now
-import sympy as sm
+
+# Import forward kinematics
 # Constant parameters
-L, D = sm.symbols('L D')  # m_L - total mass of cable, m_E - mass of weighted end
+L, D = sm.symbols('L D')
 p = sm.Matrix([L, D])
 p_vals = [0.75, 0.01]
 # Configuration variables
-theta_0, theta_1= sm.symbols('theta_0 theta_1')
+theta_0, theta_1, x, z, phi = sm.symbols('theta_0 theta_1 x z phi')
 theta = sm.Matrix([theta_0, theta_1])
-# Object coordinates
-fk_x, fk_z = sm.symbols('fk_x fk_z')
-fk = sm.Matrix([fk_x, fk_z])
-alpha = sm.symbols('alpha') # tip orientation in object base frame
+q = sm.Matrix([theta_0, theta_1, x, z, phi])
 # Integration variables
-s, v, d = sm.symbols('s v d')
-# Spine x,z in object base frame
-alpha = theta_0*v + 0.5*theta_1*v**2
-fk[0] = L*sm.integrate(sm.sin(alpha),(v, 0, s))
-fk[1] = -L*sm.integrate(sm.cos(alpha),(v, 0, s)) # TODO - recheck all frames etc to make model match robot...
-# FK of midpoint and endpoint in base frame (for curvature IK)
-fk_mid_fixed = fk.subs(s, 0.5)
-fk_end_fixed = fk.subs(s, 1)
-J_mid_fixed = fk_mid_fixed.jacobian(sm.Matrix([theta_0, theta_1]))
-J_end_fixed = fk_end_fixed.jacobian(sm.Matrix([theta_0, theta_1]))
-f_FK_mid = sm.lambdify((theta,p), fk_mid_fixed, "mpmath")
-f_FK_end = sm.lambdify((theta,p), fk_end_fixed, "mpmath")
-f_J_mid = sm.lambdify((theta,p), J_mid_fixed, "mpmath")
-f_J_end = sm.lambdify((theta,p), J_end_fixed, "mpmath")
-# Full FK for plotting
-f_FK = sm.lambdify((theta,p,s,d), fk, "mpmath")
+s, d = sm.symbols('s d')
+# Load functions
+f_FK_mid = sm.lambdify((theta,p), pickle.load(open("./generated_functions/fk_mid_fixed", "rb")), "mpmath")
+f_FK_end = sm.lambdify((theta,p), pickle.load(open("./generated_functions/fk_end_fixed", "rb")), "mpmath")
+f_J_mid = sm.lambdify((theta,p), pickle.load(open("./generated_functions/J_mid_fixed", "rb")), "mpmath")
+f_J_end = sm.lambdify((theta,p), pickle.load(open("./generated_functions/J_end_fixed", "rb")), "mpmath")
+f_FK = sm.lambdify((q,p,s,d), pickle.load(open("./generated_functions/fk", "rb")), "mpmath")
 ###
 
 theta_extracted = np.empty((fk_targets.shape[0],2,))
@@ -179,6 +172,8 @@ np.savez(data_dir + '/processed', t=t_target,
          ddZ=ddZ, dPhi=dPhi, ddPhi=ddPhi)
 
 #%%
+# Plotting examples
+
 # Plot X
 # plt.plot(t_target[120:200],X[120:200])
 # plt.title('X')
@@ -195,6 +190,12 @@ np.savez(data_dir + '/processed', t=t_target,
 # plt.plot(t_target[100:170],ddX[100:170])
 # plt.title('ddX')
 # plt.show()
+
+# plt.plot(X_mid,Z_mid)
+# plt.plot(X_end,Z_end)
+# plt.plot(X,Z)
+# plt.axis('equal')
+# plt.xlim(0,0.7)
 
 #%%
 # # Filtering test
