@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 #%%
+import sys
 import os
 import cv2
 import csv
@@ -18,16 +19,16 @@ def showim(img):
     if k == 27:         # wait for ESC key to exit
         cv2.destroyAllWindows()
 
-def plot_markers(idx, plot_mask=False, save=False):
+def plot_markers(idx, plot_mask=True, save=False):
     img_name = os.listdir(img_folder)[idx]
     img = cv2.cvtColor(cv2.imread(img_folder + img_name), cv2.COLOR_BGR2RGB)
 
-    fig = plt.figure(figsize=(10, 8))
+    fig = plt.figure(figsize=(7.5, 6))
     ax = fig.add_subplot(autoscale_on=False)
     ax.set_aspect('equal')
     ax.grid()
-    ax.set_xlim(0,1920)
-    ax.set_ylim(0,1080)
+    ax.set_xlim(0,img.shape[1])
+    ax.set_ylim(0,img.shape[0])
     marker_colors = ['palegreen','lightskyblue']
 
     if plot_mask:
@@ -38,6 +39,7 @@ def plot_markers(idx, plot_mask=False, save=False):
     ax.imshow(np.asarray(img)) # TODO - way to make this not display when saving?
     ax.plot(mid_positions_px[idx,1],mid_positions_px[idx,0],ms=2,fillstyle='none',marker='o',mec=marker_colors[0])
     ax.plot(end_positions_px[idx,1],end_positions_px[idx,0],ms=2,fillstyle='none',marker='o',mec=marker_colors[1])
+    # ax.plot(110,460,'y,') # For checking difference between projection and image
     
     if save:
         if not os.path.exists(img_folder + 'detections'):
@@ -45,13 +47,43 @@ def plot_markers(idx, plot_mask=False, save=False):
         plt.savefig(img_folder + '/detections/' + img_name[:-4] + '_d.png', bbox_inches='tight', pad_inches=0.1)
 
 #%%
+# Paths - TODO check if this works at all
+if len(sys.argv) > 1:   # arg is dataset name, assume running from dated data folder
+    dataset_name = str(sys.argv[1])
+    data_dir = os.getcwd() + '/' + dataset_name + '/'
+    data_date = os.path.basename(os.getcwd())
+else:   # assume running from dataset folder, inside dated data folder
+    data_dir = os.getcwd()
+    dataset_name = os.path.basename(data_dir)
+    data_date = os.path.basename(os.path.dirname(data_dir))
+    
+print('Dataset: ' + dataset_name)
+print('Date: ' + data_date)
+print('Path: ' + data_dir)
+
+#%%
+# Manual paths for interactive mode
+dataset_name = 'rot_link6_w_mass'
+data_date = '0417'
+data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name + '/'
+
+print('Dataset: ' + dataset_name)
+print('Date: ' + data_date)
+print('Path: ' + data_dir)
+
+#%%
 # Camera intrinsic and extrinsic transforms
-# K matrix (TODO - read from camera info.txt)
-K_cam = np.array([[1365.853271484375, 0.0, 975.876708984375], 
-                  [0.0, 1365.0545654296875, 559.9922485351562], 
+# K matrix from saved camera info
+# TODO - extracting values manually from calibration files... mega hacky but... it'll do? Until anything at all changes and breaks it
+K_line = np.loadtxt(data_dir + 'color_camera_info.txt', dtype='str', delimiter=',', skiprows=10, max_rows=1)
+K_cam = np.array([[float(K_line[0][4:]), 0.0, float(K_line[2])], 
+                  [0.0, float(K_line[4]), float(K_line[5])], 
                   [0.0, 0.0, 1.0]])
-R_cam = R.from_quat([0.523796, 0.6114, -0.381026, 0.454584]).as_matrix() # cam to base frame # TODO - import from calib file
-T_cam = np.array([[0.292646],[0.606908],[0.5813980]])
+
+R_line = np.loadtxt(data_dir + '../calib_' + data_date + '.launch', dtype='str', delimiter=' ', skiprows=5, max_rows=1)
+R_cam = R.from_quat([float(R_line[11]), float(R_line[12]), float(R_line[13]), float(R_line[14])]).as_matrix() # cam to base frame
+T_cam = np.array([[float(R_line[6][6:])],[float(R_line[7])],[float(R_line[8])]])
+                 
 E_cam = np.hstack([R_cam.T, -R_cam.T@T_cam]) # base to cam frame
 P = K_cam@E_cam
 
@@ -64,7 +96,7 @@ def px_to_space(u,v):
 
 #%%
 # Process each image in folder
-img_folder = './paramID_data/0406/sine_x_w_depth/images_subset/'
+img_folder = data_dir + 'images/'
 
 mid_positions_px = []
 end_positions_px = []
@@ -75,10 +107,10 @@ end_mask_pixels = []
 marker_ts = []
 
 # Mask range for green and blue markers
-lower_G = np.array([25,64,30])
-upper_G = np.array([85,255,255])
-lower_B = np.array([85,64,30])
-upper_B = np.array([135,255,255])
+lower_G = np.array([20,80,20])
+upper_G = np.array([80,255,255])
+lower_B = np.array([90,100,20])
+upper_B = np.array([130,255,255])
 
 for img_name in os.listdir(img_folder):
     img = cv2.imread(img_folder + img_name)
@@ -88,10 +120,11 @@ for img_name in os.listdir(img_folder):
     mask_B = cv2.inRange(hsv, lower_B, upper_B)
 
     # Crop above base
-    mask_G[:,:250] = 0
-    mask_B[:,:250] = 0
-    # Crop edge - creating some spurious blue readings - TODO proper solution, outlier resistant
-    mask_B[:25,:] = 0
+    mask_G[:,1000:] = 0
+    mask_B[:,900:] = 0
+    # Crop trouble areas creating some spurious readings - TODO proper solution, outlier resistant
+    mask_G[:,:125] = 0
+    # mask_B[:25,:] = 0
 
     # Remove noise from mask
     mask_G = cv2.morphologyEx(mask_G, cv2.MORPH_OPEN, np.ones((5,5)))
@@ -132,7 +165,7 @@ t_markers = (t_markers - t_markers[0])/1e9
 
 #%%
 # Export to csv
-with open(img_folder + '../marker_positions.csv', 'w', newline='') as csvfile:
+with open(data_dir + 'marker_positions.csv', 'w', newline='') as csvfile:
     writer = csv.writer(csvfile, delimiter=',')
     writer.writerow(['ts', 'mid_pos_x', 'mid_pos_z', 'end_pos_x', 'end_pos_z'])
     for n in range(len(marker_ts)):
