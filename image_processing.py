@@ -46,6 +46,23 @@ def plot_markers(idx, plot_mask=True, save=False):
             os.makedirs(img_folder + 'detections')
         plt.savefig(img_folder + '/detections/' + img_name[:-4] + '_d.png', bbox_inches='tight', pad_inches=0.1)
 
+# Pixel to 3D conversions
+def UV_to_XZplane(u,v):
+    rhs1 = np.hstack([P[:,:3],np.array([[-u,-v,-1]]).T])
+    rhs1 = np.vstack([rhs1, np.array([0,1,0,0])])   # Intersect Y=0 plane
+    rhs2 = np.reshape(np.hstack([-P[:,3],[0]]),(4,1))
+    sol = np.linalg.inv(rhs1)@rhs2
+    return sol[:3]
+
+# Todo - torubleshoot/fix depth & clean up, or remove
+# def UV_to_XYZ(u,v):
+#     rhs1 = np.hstack([K_cam,np.array([[-u,-v,-1]]).T])
+#     rhs1 = np.vstack([rhs1, np.array([0,0,1,0])])   # Intersect Z=depth plane
+#     rhs2 = np.array([[0],[0,],[0],[dimg[v,u]/1000]])
+#     sol = np.linalg.inv(rhs1)@rhs2
+#     sol = E_base@sol
+#     return sol[:3]
+
 #%%
 # Paths - TODO check if this works at all
 if len(sys.argv) > 1:   # arg is dataset name, assume running from dated data folder
@@ -84,15 +101,9 @@ R_line = np.loadtxt(data_dir + '../calib_' + data_date + '.launch', dtype='str',
 R_cam = R.from_quat([float(R_line[11]), float(R_line[12]), float(R_line[13]), float(R_line[14])]).as_matrix() # cam to base frame
 T_cam = np.array([[float(R_line[6][6:])],[float(R_line[7])],[float(R_line[8])]])
                  
+E_base = np.hstack([R_cam, T_cam]) # cam to base frame
 E_cam = np.hstack([R_cam.T, -R_cam.T@T_cam]) # base to cam frame
 P = K_cam@E_cam
-
-def px_to_space(u,v):
-    rhs1 = np.hstack([P[:,:3],np.array([[-u,-v,-1]]).T])
-    rhs1 = np.vstack([rhs1, np.array([0,1,0,0])])   # Intersect Y=0 plane
-    rhs2 = np.reshape(np.hstack([-P[:,3],[0]]),(4,1))
-    sol = np.linalg.inv(rhs1)@rhs2
-    return sol[:3]
 
 #%%
 # Process each image in folder
@@ -100,11 +111,17 @@ img_folder = data_dir + 'images/'
 
 mid_positions_px = []
 end_positions_px = []
-mid_positions_3D = []
-end_positions_3D = []
+mid_positions_XZplane = []
+end_positions_XZplane = []
 mid_mask_pixels = []
 end_mask_pixels = []
 marker_ts = []
+
+# For depth
+# mid_positions_XYZ = []
+# end_positions_XYZ = []
+# dimg_list = os.listdir(data_dir + 'depth/')
+# didx = 0
 
 # Mask range for green and blue markers
 lower_G = np.array([20,80,20])
@@ -142,26 +159,37 @@ for img_name in os.listdir(img_folder):
     masked_B = cv2.bitwise_and(img,img,mask=mask_B)
 
     # Locate markers at COM of mask
-    mid_pos_px = center_of_mass(mask_G)
-    end_pos_px = center_of_mass(mask_B)
-    # Convert px location to 3D, assuming on Y=0 plane
-    mid_pos_3D = px_to_space(mid_pos_px[1],mid_pos_px[0])
-    end_pos_3D = px_to_space(end_pos_px[1],end_pos_px[0])
+    mid_pos_px = np.round(center_of_mass(mask_G)).astype(int)
+    end_pos_px = np.round(center_of_mass(mask_B)).astype(int)
+    # Convert px location to world frame, assuming on Y=0 plane
+    mid_pos_XZplane = UV_to_XZplane(mid_pos_px[1],mid_pos_px[0])
+    end_pos_XZplane = UV_to_XZplane(end_pos_px[1],end_pos_px[0])
+
+    # # Convert px location to world frame, using depth measurement
+    # dimg = cv2.imread(data_dir + 'depth/' + dimg_list[didx], cv2.IMREAD_UNCHANGED)
+    # mid_pos_XYZ = UV_to_XYZ(mid_pos_px[1],mid_pos_px[0])
+    # end_pos_XYZ = UV_to_XYZ(end_pos_px[1],end_pos_px[0])
+    # mid_positions_XYZ.append(mid_pos_XYZ)
+    # end_positions_XYZ.append(end_pos_XYZ)
 
     mid_positions_px.append(mid_pos_px)
     end_positions_px.append(end_pos_px)
-    mid_positions_3D.append(mid_pos_3D)
-    end_positions_3D.append(end_pos_3D)
+    mid_positions_XZplane.append(mid_pos_XZplane)
+    end_positions_XZplane.append(end_pos_XZplane)
     mid_mask_pixels.append(np.where(masked_G[:,:,0] > 0))
     end_mask_pixels.append(np.where(masked_B[:,:,0] > 0))
     marker_ts.append(img_name[:-4])
 
 mid_positions_px = np.array(mid_positions_px)
 end_positions_px = np.array(end_positions_px)
-mid_positions_3D = np.array(mid_positions_3D)
-end_positions_3D = np.array(end_positions_3D)
+mid_positions_XZplane = np.array(mid_positions_XZplane)
+end_positions_XZplane = np.array(end_positions_XZplane)
 t_markers = np.array(marker_ts, dtype=np.float64)
 t_markers = (t_markers - t_markers[0])/1e9
+
+# For depth
+# mid_positions_XYZ = np.array(mid_positions_XYZ)
+# end_positions_XYZ = np.array(end_positions_XYZ)
 
 #%%
 # Export to csv
@@ -170,8 +198,8 @@ with open(data_dir + 'marker_positions.csv', 'w', newline='') as csvfile:
     writer.writerow(['ts', 'mid_pos_x', 'mid_pos_z', 'end_pos_x', 'end_pos_z'])
     for n in range(len(marker_ts)):
         writer.writerow([marker_ts[n], 
-                         float(mid_positions_3D[n,0]), float(mid_positions_3D[n,2]), 
-                         float(end_positions_3D[n,0]), float(end_positions_3D[n,2])])
+                         float(mid_positions_XZplane[n,0]), float(mid_positions_XZplane[n,2]), 
+                         float(end_positions_XZplane[n,0]), float(end_positions_XZplane[n,2])])
 
 #%%
 # Animated plot (requires %matplotlib ipympl) TODO - crashes after a while (ipympl)
