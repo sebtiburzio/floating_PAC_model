@@ -34,10 +34,28 @@ def plot_data(datas, t_s=0, t_f=1e3, datas2=None, ylims1=None, ylims2=None):
 
     plt.show()
 
-def find_curvature(theta_guess, fk_target, epsilon=0.05, max_iterations=25):   # TODO - fix horrific conversions between mp and np
+def plot_FK(q_repl):
+    s_evals = np.linspace(0,1,21)
+    FK_evals = np.empty((s_evals.size,2,1))
+    FK_evals[:] = np.nan
+    for i_s in range(s_evals.size):
+       FK_evals[i_s] = np.array(f_FK(q_repl,p_vals,s_evals[i_s],0.0).apply(mp.re).tolist(),dtype=float)
+    fig, ax = plt.subplots()
+    ax.plot(FK_evals[:,0],FK_evals[:,1])
+    plt.xlim(FK_evals[0,0]-0.8,FK_evals[0,0]+0.8)
+    plt.ylim(FK_evals[0,1]-0.8,FK_evals[0,1]+0.2)
+    ## MANUALLY ADD TARGETS TO PLOT
+    # ax.scatter(fk_targets[n,0], fk_targets[n,1])
+    # ax.scatter(fk_targets[n,2], fk_targets[n,3])
+    ## DONT FORGET TO REMOVE
+    fig.set_figwidth(8)
+    ax.set_aspect('equal','box')
+    plt.show()
+
+def find_curvature(theta_guess, fk_target, epsilon=0.05, max_iterations=25):  
     theta_est = None
     for i in range(max_iterations):
-        error = np.vstack([np.array(f_FK_mid(theta_guess,p_vals).apply(mp.re).tolist(),dtype=float),
+        error = np.vstack([np.array(f_FK_mid(theta_guess,p_vals).apply(mp.re).tolist(),dtype=float),  # TODO - replace with eval fcuntions
                            np.array(f_FK_end(theta_guess,p_vals).apply(mp.re).tolist(),dtype=float)]) - fk_target.reshape(4,1)
         if np.linalg.norm(error) < epsilon:
             theta_est = theta_guess
@@ -50,6 +68,43 @@ def find_curvature(theta_guess, fk_target, epsilon=0.05, max_iterations=25):   #
         print('Failed to converge\n')
         theta_est = np.array([np.nan, np.nan])
     return theta_est
+
+#%%
+# Import forward kinematics
+# Constant parameters
+m_L, m_E, L, D = sm.symbols('m_L m_E L D')  # m_L - total mass of cable, m_E - mass of weighted end
+p = sm.Matrix([m_L, m_E, L, D])
+p_vals = [1.0, 1.0, 1.0, 0.01]
+# Configuration variables
+theta_0, theta_1, x, z, phi = sm.symbols('theta_0 theta_1 x z phi')
+theta = sm.Matrix([theta_0, theta_1])
+q = sm.Matrix([theta_0, theta_1, x, z, phi])
+# Integration variables
+s, d = sm.symbols('s d')
+# Load functions
+f_FK_mid = sm.lambdify((theta,p), pickle.load(open("./generated_functions/fk_mid_fixed", "rb")), "mpmath")
+f_FK_end = sm.lambdify((theta,p), pickle.load(open("./generated_functions/fk_end_fixed", "rb")), "mpmath")
+f_J_mid = sm.lambdify((theta,p), pickle.load(open("./generated_functions/J_mid_fixed", "rb")), "mpmath")
+f_J_end = sm.lambdify((theta,p), pickle.load(open("./generated_functions/J_end_fixed", "rb")), "mpmath")
+f_FK = sm.lambdify((q,p,s,d), pickle.load(open("./generated_functions/fk", "rb")), "mpmath")
+
+def eval_fk(q, p_vals, s, d):
+    XZ = np.array(f_FK(q, p_vals, s, d).apply(mp.re).tolist(), dtype=float)
+    if q[1] < 0:
+        XZ = -XZ  # TODO - manually handling SymPy sqrt issue
+    return XZ
+
+def eval_midpt(theta, p_vals):
+    XZ = np.array(f_FK_mid(theta, p_vals).apply(mp.re).tolist(), dtype=float)
+    if theta[1] < 0:
+        XZ = -XZ  # TODO - manually handling SymPy sqrt issue
+    return XZ
+
+def eval_endpt(theta, p_vals):
+    XZ = np.array(f_FK_end(theta, p_vals).apply(mp.re).tolist(), dtype=float)
+    if theta[1] < 0:
+        XZ = -XZ  # TODO - manually handling SymPy sqrt issue
+    return XZ
 
 #%%
 # Import csv data
@@ -107,44 +162,6 @@ R_Phi = R.from_euler('y', -Phi, degrees=False).as_matrix()
 fk_targets_mid = np.einsum('ijk,ik->ij', R_Phi, fk_targets_mid)
 fk_targets_end = np.einsum('ijk,ik->ij', R_Phi, fk_targets_end)
 fk_targets = np.hstack([fk_targets_mid[:,(0,2)], fk_targets_end[:,(0,2)]])
-
-###
-def plot_FK(q_repl):
-    s_evals = np.linspace(0,1,11)
-    FK_evals = np.empty((s_evals.size,2,))
-    FK_evals[:] = np.nan
-    for i_s in range(s_evals.size):
-       FK_evals[i_s] = f_FK(q_repl,p_vals,s_evals[i_s],0.0)
-    fig, ax = plt.subplots()
-    ax.plot(FK_evals[:,0],FK_evals[:,1])
-    plt.xlim(FK_evals[0,0]-0.8,FK_evals[0,0]+0.8)
-    plt.ylim(FK_evals[0,1]-0.8,FK_evals[0,1]+0.2)
-    ## MANUALLY ADD TARGETS TO PLOT
-    ax.scatter(fk_targets[n,0], fk_targets[n,1])
-    ax.scatter(fk_targets[n,2], fk_targets[n,3])
-    ## DONT FORGET TO REMOVE
-    fig.set_figwidth(8)
-    ax.set_aspect('equal','box')
-    plt.show()
-###
-
-# Import forward kinematics
-# Constant parameters
-L, D = sm.symbols('L D')
-p = sm.Matrix([L, D])
-p_vals = [0.75, 0.01]
-# Configuration variables
-theta_0, theta_1, x, z, phi = sm.symbols('theta_0 theta_1 x z phi')
-theta = sm.Matrix([theta_0, theta_1])
-q = sm.Matrix([theta_0, theta_1, x, z, phi])
-# Integration variables
-s, d = sm.symbols('s d')
-# Load functions
-f_FK_mid = sm.lambdify((theta,p), pickle.load(open("./generated_functions/fk_mid_fixed", "rb")), "mpmath")
-f_FK_end = sm.lambdify((theta,p), pickle.load(open("./generated_functions/fk_end_fixed", "rb")), "mpmath")
-f_J_mid = sm.lambdify((theta,p), pickle.load(open("./generated_functions/J_mid_fixed", "rb")), "mpmath")
-f_J_end = sm.lambdify((theta,p), pickle.load(open("./generated_functions/J_end_fixed", "rb")), "mpmath")
-f_FK = sm.lambdify((q,p,s,d), pickle.load(open("./generated_functions/fk", "rb")), "mpmath")
 
 theta_extracted = np.empty((fk_targets.shape[0],2,))
 theta_guess = np.array([1e-3, 1e-3])

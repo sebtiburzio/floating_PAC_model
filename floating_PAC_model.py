@@ -36,6 +36,8 @@ tic = time.perf_counter()
 alpha = -(theta_0*v + 0.5*theta_1*v**2) # negative curvature so sense matches robot frame Y axis rotation
 fk[0] = L*sm.integrate(sm.sin(alpha),(v, 0, s)) # x. when theta=0, x=0.
 fk[1] = -L*sm.integrate(sm.cos(alpha),(v, 0, s)) # z. when theta=0, z=-L. 
+# TODO - possible bug/ambiguity in how Sympy handles sqrt of rational expressions results in additional -1 factor
+# when theta_1 is negative. For now, handling manually in calls to loaded functions. Need to fix for dynamic equations.
 
 # FK of midpoint and endpoint in base frame (for curvature IK)
 fk_mid_fixed = fk.subs(s, 0.5)
