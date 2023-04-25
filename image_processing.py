@@ -55,21 +55,21 @@ def UV_to_XZplane(u,v):
     return sol[:3]
 
 # Todo - torubleshoot/fix depth & clean up, or remove
-# def UV_to_XYZ(u,v):
-#     rhs1 = np.hstack([K_cam,np.array([[-u,-v,-1]]).T])
-#     rhs1 = np.vstack([rhs1, np.array([0,0,1,0])])   # Intersect Z=depth plane
-#     rhs2 = np.array([[0],[0,],[0],[dimg[v,u]/1000]])
-#     sol = np.linalg.inv(rhs1)@rhs2
-#     sol = E_base@sol
-#     return sol[:3]
+def UV_to_XYZ(u,v):
+    rhs1 = np.hstack([K_cam,np.array([[-u,-v,-1]]).T])
+    rhs1 = np.vstack([rhs1, np.array([0,0,1,0])])   # Intersect Z=depth plane
+    rhs2 = np.array([[0],[0,],[0],[dimg[v,u]/1000]])
+    sol = np.linalg.inv(rhs1)@rhs2
+    sol = E_base@sol
+    return sol[:3]
 
 #%%
 # Paths - TODO check if this works at all
-if len(sys.argv) > 1:   # arg is dataset name, assume running from dated data folder
+if len(sys.argv) > 1: # arg is dataset name, assume running from dated data folder
     dataset_name = str(sys.argv[1])
     data_dir = os.getcwd() + '/' + dataset_name + '/'
     data_date = os.path.basename(os.getcwd())
-else:   # assume running from dataset folder, inside dated data folder
+else: # assume running from dataset folder, inside dated data folder
     data_dir = os.getcwd()
     dataset_name = os.path.basename(data_dir)
     data_date = os.path.basename(os.path.dirname(data_dir))
@@ -171,6 +171,7 @@ for img_name in os.listdir(img_folder):
     # end_pos_XYZ = UV_to_XYZ(end_pos_px[1],end_pos_px[0])
     # mid_positions_XYZ.append(mid_pos_XYZ)
     # end_positions_XYZ.append(end_pos_XYZ)
+    # didx += 1
 
     mid_positions_px.append(mid_pos_px)
     end_positions_px.append(end_pos_px)
@@ -188,8 +189,8 @@ t_markers = np.array(marker_ts, dtype=np.float64)
 t_markers = (t_markers - t_markers[0])/1e9
 
 # For depth
-# mid_positions_XYZ = np.array(mid_positions_XYZ)
-# end_positions_XYZ = np.array(end_positions_XYZ)
+mid_positions_XYZ = np.array(mid_positions_XYZ)
+end_positions_XYZ = np.array(end_positions_XYZ)
 
 #%%
 # Export to csv

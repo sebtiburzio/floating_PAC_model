@@ -36,11 +36,6 @@ def plot_data(datas, t_s=0, t_f=1e3, datas2=None, ylims1=None, ylims2=None):
 
 def plot_XZ(t_s=0, t_f=1e3):
     window = np.asarray((t_target >= t_s) & (t_target < t_f)).nonzero()
-    # low = 0
-    # high = X.size-1
-    # if n != None:
-    #     low = np.amax([0,n-2])
-    #     high = np.amin([X.size-1,n+2])
     plt.plot(X[window],Z[window],'tab:red')
     plt.plot(X_mid[window],Z_mid[window],'tab:green')
     plt.plot(X_end[window],Z_end[window],'tab:blue')
@@ -48,12 +43,6 @@ def plot_XZ(t_s=0, t_f=1e3):
 
 def plot_fk_targets(t_s=0, t_f=1e3):
     window = np.asarray((t_target >= t_s) & (t_target < t_f)).nonzero()
-    low = 0
-    high = X.size-1
-    n=100
-    if n != None:
-        low = np.amax([0,n-2])
-        high = np.amin([X.size-1,n+2])
     plt.scatter(0,0,c='tab:red',marker='+')
     plt.plot(fk_targets[window,0].squeeze(),fk_targets[window,1].squeeze(),'tab:green')
     plt.plot(fk_targets[window,2].squeeze(),fk_targets[window,3].squeeze(),'tab:blue')
@@ -66,22 +55,22 @@ def plot_FK(q_repl):
     for i_s in range(s_evals.size):
        FK_evals[i_s] = np.array(f_FK(q_repl,p_vals,s_evals[i_s],0.0).apply(mp.re).tolist(),dtype=float)
     fig, ax = plt.subplots()
-    ax.plot(FK_evals[:,0],FK_evals[:,1])
+    # MANUALLY ADD TARGETS TO PLOT
+    ax.scatter(fk_targets[n,0], fk_targets[n,1],s=2, c='tab:green')
+    ax.scatter(fk_targets[n,2], fk_targets[n,3],s=2, c='tab:blue')
+    # DONT FORGET TO REMOVE
+    ax.plot(FK_evals[:,0],FK_evals[:,1],'tab:orange')
     plt.xlim(FK_evals[0,0]-0.8,FK_evals[0,0]+0.8)
     plt.ylim(FK_evals[0,1]-0.8,FK_evals[0,1]+0.2)
-    ## MANUALLY ADD TARGETS TO PLOT
-    # ax.scatter(fk_targets[n,0], fk_targets[n,1])
-    # ax.scatter(fk_targets[n,2], fk_targets[n,3])
-    ## DONT FORGET TO REMOVE
     fig.set_figwidth(8)
     ax.set_aspect('equal','box')
+    ax.grid(True)
     plt.show()
 
 def find_curvature(theta_guess, fk_target, epsilon=0.05, max_iterations=25):  
     theta_est = None
     for i in range(max_iterations):
-        error = np.vstack([np.array(f_FK_mid(theta_guess,p_vals).apply(mp.re).tolist(),dtype=float),  # TODO - replace with eval fcuntions
-                           np.array(f_FK_end(theta_guess,p_vals).apply(mp.re).tolist(),dtype=float)]) - fk_target.reshape(4,1)
+        error = np.vstack([eval_midpt(theta_guess,p_vals), eval_endpt(theta_guess,p_vals)]) - fk_target.reshape(4,1)
         if np.linalg.norm(error) < epsilon:
             theta_est = theta_guess
             break
@@ -132,7 +121,7 @@ def eval_endpt(theta, p_vals):
 
 #%%
 # Import csv data
-data_dir = './paramID_data/0417/sine_x_w_mass' # + sys.argv[2]
+data_dir = './paramID_data/0417/rot_link6_w_mass' # + sys.argv[2]
 O_T_EE = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1)
 markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows=1)
 W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1)
@@ -145,8 +134,8 @@ t_W = (W[:,0]-timestamp_begin)/1e9
 t_end = (timestamp_end - timestamp_begin)/1e9
 
 # Physical definitions for object set up
-p_vals = [1.0, 1.0, 0.742, 0.015]
-base_offset = 0.0085 # Z-dir offset of cable attachment point from measured robot EE frame
+p_vals = [1.0, 1.0, 0.75, 0.015]
+base_offset = 0.0 # Z-dir offset of cable attachment point from measured robot EE frame
 
 # Copy relevant planar data
 RPY_meas = R.from_matrix(np.array([[O_T_EE[:,1], O_T_EE[:,2],O_T_EE[:,3]],
@@ -191,7 +180,7 @@ fk_targets_mid = np.einsum('ijk,ik->ij', R_Phi, fk_targets_mid)
 fk_targets_end = np.einsum('ijk,ik->ij', R_Phi, fk_targets_end)
 fk_targets = np.hstack([fk_targets_mid[:,(0,2)], fk_targets_end[:,(0,2)]])
 
-theta_extracted = np.empty((fk_targets.shape[0],2,))
+theta_extracted = np.zeros((fk_targets.shape[0],2,))
 theta_guess = np.array([1e-3, 1e-3])
 #%%
 for n in range(100): #range(fk_targets.shape[0]):
