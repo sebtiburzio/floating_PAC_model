@@ -34,6 +34,31 @@ def plot_data(datas, t_s=0, t_f=1e3, datas2=None, ylims1=None, ylims2=None):
 
     plt.show()
 
+def plot_XZ(t_s=0, t_f=1e3):
+    window = np.asarray((t_target >= t_s) & (t_target < t_f)).nonzero()
+    # low = 0
+    # high = X.size-1
+    # if n != None:
+    #     low = np.amax([0,n-2])
+    #     high = np.amin([X.size-1,n+2])
+    plt.plot(X[window],Z[window],'tab:red')
+    plt.plot(X_mid[window],Z_mid[window],'tab:green')
+    plt.plot(X_end[window],Z_end[window],'tab:blue')
+    plt.axis('equal')
+
+def plot_fk_targets(t_s=0, t_f=1e3):
+    window = np.asarray((t_target >= t_s) & (t_target < t_f)).nonzero()
+    low = 0
+    high = X.size-1
+    n=100
+    if n != None:
+        low = np.amax([0,n-2])
+        high = np.amin([X.size-1,n+2])
+    plt.scatter(0,0,c='tab:red',marker='+')
+    plt.plot(fk_targets[window,0].squeeze(),fk_targets[window,1].squeeze(),'tab:green')
+    plt.plot(fk_targets[window,2].squeeze(),fk_targets[window,3].squeeze(),'tab:blue')
+    plt.axis('equal')
+
 def plot_FK(q_repl):
     s_evals = np.linspace(0,1,21)
     FK_evals = np.empty((s_evals.size,2,1))
@@ -74,7 +99,6 @@ def find_curvature(theta_guess, fk_target, epsilon=0.05, max_iterations=25):
 # Constant parameters
 m_L, m_E, L, D = sm.symbols('m_L m_E L D')  # m_L - total mass of cable, m_E - mass of weighted end
 p = sm.Matrix([m_L, m_E, L, D])
-p_vals = [1.0, 1.0, 1.0, 0.01]
 # Configuration variables
 theta_0, theta_1, x, z, phi = sm.symbols('theta_0 theta_1 x z phi')
 theta = sm.Matrix([theta_0, theta_1])
@@ -108,7 +132,7 @@ def eval_endpt(theta, p_vals):
 
 #%%
 # Import csv data
-data_dir = './paramID_data/0417/rot_link6_w_mass' # + sys.argv[2]
+data_dir = './paramID_data/0417/sine_x_w_mass' # + sys.argv[2]
 O_T_EE = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1)
 markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows=1)
 W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1)
@@ -120,18 +144,22 @@ t_markers = (markers[:,0]-timestamp_begin)/1e9
 t_W = (W[:,0]-timestamp_begin)/1e9
 t_end = (timestamp_end - timestamp_begin)/1e9
 
+# Physical definitions for object set up
+p_vals = [1.0, 1.0, 0.742, 0.015]
+base_offset = 0.0085 # Z-dir offset of cable attachment point from measured robot EE frame
+
 # Copy relevant planar data
-X_meas = O_T_EE[:,13]
-Z_meas = O_T_EE[:,15]
 RPY_meas = R.from_matrix(np.array([[O_T_EE[:,1], O_T_EE[:,2],O_T_EE[:,3]],
                                    [O_T_EE[:,5], O_T_EE[:,6],O_T_EE[:,7]],
                                    [O_T_EE[:,9], O_T_EE[:,10],O_T_EE[:,11]]]).T).as_euler('xyz', degrees=False)
 Phi_meas = RPY_meas[:,1]
+X_meas = O_T_EE[:,13] + base_offset*np.cos(Phi_meas)
+Z_meas = O_T_EE[:,15] + base_offset*np.sin(Phi_meas)
 X_mid_meas = markers[:,1]
 Z_mid_meas = markers[:,2]
 X_end_meas = markers[:,3]
 Z_end_meas = markers[:,4]
-Fx_meas = W[:,1]
+Fx_meas = W[:,1] # TODO - adjust F/T meas due to offset from FT frame?
 Fz_meas = W[:,3]
 Ty_meas = W[:,5]
 
@@ -155,9 +183,9 @@ Fz = signal.decimate(Fz_90Hz, 3)
 Ty = signal.decimate(Ty_90Hz, 3)
 
 #%%
-# Transform marker points to fixed PAC frame (subtract X/Z rotate phi)
-fk_targets_mid = np.vstack([X_mid-X+0.006,np.zeros_like(X),Z_mid-Z+0.01]).T # TODO formalise offset from EE Z frame
-fk_targets_end = np.vstack([X_end-X+0.006,np.zeros_like(X),Z_end-Z+0.01]).T # Also detecting/improving offset due to camera calib?
+# Transform marker points to fixed PAC frame (subtract X/Z, rotate back phi)
+fk_targets_mid = np.vstack([X_mid-X,np.zeros_like(X),Z_mid-Z]).T
+fk_targets_end = np.vstack([X_end-X,np.zeros_like(X),Z_end-Z]).T
 R_Phi = R.from_euler('y', -Phi, degrees=False).as_matrix()
 fk_targets_mid = np.einsum('ijk,ik->ij', R_Phi, fk_targets_mid)
 fk_targets_end = np.einsum('ijk,ik->ij', R_Phi, fk_targets_end)
