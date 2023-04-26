@@ -75,8 +75,7 @@ def find_curvature(theta_guess, fk_target, epsilon=0.05, max_iterations=25):
             theta_est = theta_guess
             break
         else:
-            J = np.vstack([np.array(f_J_mid(theta_guess, p_vals).apply(mp.re).tolist(),dtype=float),
-                           np.array(f_J_end(theta_guess, p_vals).apply(mp.re).tolist(),dtype=float)])
+            J = np.vstack([eval_J_midpt(theta_guess, p_vals), eval_J_endpt(theta_guess, p_vals)])
             theta_guess = theta_guess - (np.linalg.pinv(J)@error).squeeze() # TODO - add step size
     if theta_est is None:
         print('Failed to converge\n')
@@ -100,24 +99,12 @@ f_FK_end = sm.lambdify((theta,p), pickle.load(open("./generated_functions/fk_end
 f_J_mid = sm.lambdify((theta,p), pickle.load(open("./generated_functions/J_mid_fixed", "rb")), "mpmath")
 f_J_end = sm.lambdify((theta,p), pickle.load(open("./generated_functions/J_end_fixed", "rb")), "mpmath")
 f_FK = sm.lambdify((q,p,s,d), pickle.load(open("./generated_functions/fk", "rb")), "mpmath")
-
-def eval_fk(q, p_vals, s, d):
-    XZ = np.array(f_FK(q, p_vals, s, d).apply(mp.re).tolist(), dtype=float)
-    if q[1] < 0:
-        XZ = -XZ  # TODO - manually handling SymPy sqrt issue
-    return XZ
-
-def eval_midpt(theta, p_vals):
-    XZ = np.array(f_FK_mid(theta, p_vals).apply(mp.re).tolist(), dtype=float)
-    if theta[1] < 0:
-        XZ = -XZ  # TODO - manually handling SymPy sqrt issue
-    return XZ
-
-def eval_endpt(theta, p_vals):
-    XZ = np.array(f_FK_end(theta, p_vals).apply(mp.re).tolist(), dtype=float)
-    if theta[1] < 0:
-        XZ = -XZ  # TODO - manually handling SymPy sqrt issue
-    return XZ
+# Convenience functions to extract real floats from complex mpmath matrices
+def eval_fk(q, p_vals, s, d): return np.array(f_FK(q, p_vals, s, d).apply(mp.re).tolist(), dtype=float)
+def eval_midpt(theta, p_vals): return np.array(f_FK_mid(theta, p_vals).apply(mp.re).tolist(), dtype=float)
+def eval_endpt(theta, p_vals): return np.array(f_FK_end(theta, p_vals).apply(mp.re).tolist(), dtype=float)
+def eval_J_midpt(theta, p_vals): return np.array(f_J_mid(theta, p_vals).apply(mp.re).tolist(), dtype=float)
+def eval_J_endpt(theta, p_vals): return np.array(f_J_end(theta, p_vals).apply(mp.re).tolist(), dtype=float)
 
 #%%
 # Import csv data

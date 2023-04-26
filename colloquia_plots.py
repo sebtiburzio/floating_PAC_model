@@ -22,27 +22,11 @@ s, d = sm.symbols('s d')
 # Load functions
 f_FK_mid = sm.lambdify((theta,p), pickle.load(open("./generated_functions/fk_mid_fixed", "rb")), "mpmath")
 f_FK_end = sm.lambdify((theta,p), pickle.load(open("./generated_functions/fk_end_fixed", "rb")), "mpmath")
-f_J_mid = sm.lambdify((theta,p), pickle.load(open("./generated_functions/J_mid_fixed", "rb")), "mpmath")
-f_J_end = sm.lambdify((theta,p), pickle.load(open("./generated_functions/J_end_fixed", "rb")), "mpmath")
 f_FK = sm.lambdify((q,p,s,d), pickle.load(open("./generated_functions/fk", "rb")), "mpmath")
-
-def eval_fk(q, p_vals, s, d):
-    XZ = np.array(f_FK(q, p_vals, s, d).apply(mp.re).tolist(), dtype=float)
-    if q[1] < 0:
-        XZ = -XZ  # TODO - manually handling SymPy sqrt issue
-    return XZ
-
-def eval_midpt(theta, p_vals):
-    XZ = np.array(f_FK_mid(theta, p_vals).apply(mp.re).tolist(), dtype=float)
-    if theta[1] < 0:
-        XZ = -XZ  # TODO - manually handling SymPy sqrt issue
-    return XZ
-
-def eval_endpt(theta, p_vals):
-    XZ = np.array(f_FK_end(theta, p_vals).apply(mp.re).tolist(), dtype=float)
-    if theta[1] < 0:
-        XZ = -XZ  # TODO - manually handling SymPy sqrt issue
-    return XZ
+# Convenience functions to extract real floats from complex mpmath matrices
+def eval_fk(q, p_vals, s, d): return np.array(f_FK(q, p_vals, s, d).apply(mp.re).tolist(), dtype=float)
+def eval_midpt(theta, p_vals): return np.array(f_FK_mid(theta, p_vals).apply(mp.re).tolist(), dtype=float)
+def eval_endpt(theta, p_vals): return np.array(f_FK_end(theta, p_vals).apply(mp.re).tolist(), dtype=float)
 
 #%%
 def plot(q_repl, dir=None, n=0):

@@ -47,7 +47,7 @@ def f_dyn(t, y, F):
     return np.concatenate((dq, np.linalg.inv(B)@LHS))
 
 #%%
-# Import EOM functions
+# Import EOM functions TODO - modify for new function generation
 
 f_FK = dill.load(open('./generated_functions/f_FK','rb'))
 f_G = dill.load(open('./generated_functions/f_G','rb'))
