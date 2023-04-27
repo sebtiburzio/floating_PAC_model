@@ -3,7 +3,6 @@
 
 import time
 import sympy as sm
-from sympy import sqrt, pi, sin, cos, fresnelc, fresnels
 import pickle
 
 #%%
@@ -37,8 +36,8 @@ tic = time.perf_counter()
 alpha = -(theta_0*v + 0.5*theta_1*v**2) # negative curvature so sense matches robot frame Y axis rotation
 fk[0] = L*sm.integrate(sm.sin(alpha),(v, 0, s)) # x. when theta=0, x=0.
 fk[1] = -L*sm.integrate(sm.cos(alpha),(v, 0, s)) # z. when theta=0, z=-L. 
-# HACK - manually modify the sympy expression to evaluate sqrt(1/theta_1) instead of 1/sqrt(theta_1) inside Fresnel integrals
-fk = sm.sympify(str(fk).replace('*sqrt(theta_1))',')*sqrt(1/theta_1)'))
+# A manual subsitution is needed here to get around a SymPy bug: https://github.com/sympy/sympy/issues/25093
+fk = fk.subs(1/sm.sqrt(theta_1), sm.sqrt(1/theta_1))
 
 # FK of midpoint and endpoint in base frame (for curvature IK)
 fk_mid_fixed = fk.subs(s, 0.5)
