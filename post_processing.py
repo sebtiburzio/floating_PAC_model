@@ -49,16 +49,8 @@ def plot_fk_targets(t_s=0, t_f=1e3):
     plt.axis('equal')
 
 def plot_FK(q_repl):
-    s_evals = np.linspace(0,1,21)
-    FK_evals = np.empty((s_evals.size,2,1))
-    FK_evals[:] = np.nan
-    for i_s in range(s_evals.size):
-       FK_evals[i_s] = np.array(f_FK(q_repl,p_vals,s_evals[i_s],0.0).apply(mp.re).tolist(),dtype=float)
+    FK_evals = get_FK(q_repl)
     fig, ax = plt.subplots()
-    # MANUALLY ADD TARGETS TO PLOT
-    ax.scatter(fk_targets[n,0], fk_targets[n,1],s=2, c='tab:green')
-    ax.scatter(fk_targets[n,2], fk_targets[n,3],s=2, c='tab:blue')
-    # DONT FORGET TO REMOVE
     ax.plot(FK_evals[:,0],FK_evals[:,1],'tab:orange')
     plt.xlim(FK_evals[0,0]-0.8,FK_evals[0,0]+0.8)
     plt.ylim(FK_evals[0,1]-0.8,FK_evals[0,1]+0.2)
@@ -67,7 +59,14 @@ def plot_FK(q_repl):
     ax.grid(True)
     plt.show()
 
-def find_curvature(theta_guess, fk_target, epsilon=0.05, max_iterations=25):  
+def get_FK(q_repl,num_pts=21):
+    s_evals = np.linspace(0,1,num_pts)
+    FK_evals = np.zeros((s_evals.size,2,1))
+    for i_s in range(s_evals.size):
+       FK_evals[i_s] = np.array(eval_fk(q_repl,p_vals,s_evals[i_s],0.0))
+    return FK_evals.squeeze()
+
+def find_curvature(theta_guess, fk_target, epsilon=0.01, max_iterations=25):  
     theta_est = None
     for i in range(max_iterations):
         error = np.vstack([eval_midpt(theta_guess,p_vals), eval_endpt(theta_guess,p_vals)]) - fk_target.reshape(4,1)
@@ -76,9 +75,9 @@ def find_curvature(theta_guess, fk_target, epsilon=0.05, max_iterations=25):
             break
         else:
             J = np.vstack([eval_J_midpt(theta_guess, p_vals), eval_J_endpt(theta_guess, p_vals)])
-            theta_guess = theta_guess - (np.linalg.pinv(J)@error).squeeze() # TODO - add step size
+            theta_guess = theta_guess - (np.linalg.pinv(J)@error).squeeze() # TODO - add step size?
     if theta_est is None:
-        print('Failed to converge\n')
+        print('Failed to converge')
         theta_est = np.array([np.nan, np.nan])
     return theta_est
 
@@ -143,7 +142,7 @@ Ty_meas = W[:,5]
 freq_target = 30
 t_target = np.arange(0, t_end, 1/freq_target)
 X = np.interp(t_target, t_OTEE, X_meas)
-Z = np.interp(t_target, t_OTEE, Z_meas) # TODO define offset from EE to object base
+Z = np.interp(t_target, t_OTEE, Z_meas)
 Phi = np.interp(t_target, t_OTEE, Phi_meas)
 X_mid = np.interp(t_target, t_markers, X_mid_meas)
 Z_mid = np.interp(t_target, t_markers, Z_mid_meas)
@@ -169,34 +168,38 @@ fk_targets = np.hstack([fk_targets_mid[:,(0,2)], fk_targets_end[:,(0,2)]])
 
 theta_extracted = np.zeros((fk_targets.shape[0],2,))
 theta_guess = np.array([1e-3, 1e-3])
+IK_converged = np.zeros((fk_targets.shape[0],2,))
+
 #%%
-for n in range(100): #range(fk_targets.shape[0]):
-    print(n)
+# Extract curvature from marker points
+for n in range(fk_targets.shape[0]):
     theta_n = find_curvature(theta_guess, fk_targets[n,:])
     theta_extracted[n,:] = theta_n
     if np.isnan(theta_n).any():
-        print('Failed to converge for sample' + str(n))
+        print('Failed to converge for sample ' + str(n))
+        theta_extracted[n,:] = theta_guess
     else:
         theta_guess = theta_n
+        IK_converged[n,:] = 1
 
 #%%
-# Finite difference derivatives 
-dX = np.diff(X)/(1/freq_target)
-ddX = np.diff(dX)/(1/freq_target)
-dZ = np.diff(Z)/(1/freq_target)
-ddZ = np.diff(dZ)/(1/freq_target)
-dPhi = np.diff(Phi)/(1/freq_target)
-ddPhi = np.diff(dPhi)/(1/freq_target)
+# # Finite difference derivatives 
+# dX = np.diff(X)/(1/freq_target)
+# ddX = np.diff(dX)/(1/freq_target)
+# dZ = np.diff(Z)/(1/freq_target)
+# ddZ = np.diff(dZ)/(1/freq_target)
+# dPhi = np.diff(Phi)/(1/freq_target)
+# ddPhi = np.diff(dPhi)/(1/freq_target)
 
 #%%
-# Save data
+# # Save data
 # np.savez(data_dir + '/processed', t=t_target, 
 #          X=X, Z=Z, Phi=Phi, Fx=Fx, Fz=Fz, Ty=Ty, 
 #          dX=dX, ddX=ddX, dZ=dZ, 
 #          ddZ=ddZ, dPhi=dPhi, ddPhi=ddPhi)
 
 #%%
-# Plotting examples
+# # Plotting examples
 
 # Plot X
 # plt.plot(t_target[120:200],X[120:200])
@@ -220,6 +223,65 @@ ddPhi = np.diff(dPhi)/(1/freq_target)
 # plt.plot(X,Z)
 # plt.axis('equal')
 # plt.xlim(0,0.7)
+
+#%%
+# Animation imports
+import matplotlib
+matplotlib.use("Agg")
+from matplotlib.animation import FFMpegWriter
+
+#%%
+# Curvature extraction animation
+writer = FFMpegWriter(fps=freq_target)
+
+fig, ax = plt.subplots()
+base, = plt.plot([], [], c='k')
+curve, = plt.plot([], [])
+mid = plt.scatter([], [], s=2, c='tab:green',zorder=2.5)
+end = plt.scatter([], [], s=2, c='tab:blue',zorder=2.5)
+plt.xlim(-(p_vals[2]+0.1), (p_vals[2]+0.1))
+plt.ylim(-(p_vals[2]+0.1), 0.1)
+ax.set_aspect('equal')
+ax.grid(True)
+
+in_robot_frame = False
+
+with writer.saving(fig, 'test.mp4', 200):
+    for i in range(fk_targets.shape[0]):
+        if i % freq_target == 0:
+            print('Generating animation, ' + str(i/freq_target) + ' of ' + str(t_end) + 's')
+
+        # Draw base
+        if in_robot_frame:
+            base.set_data([X[i]-0.05*np.cos(Phi[i]+np.pi/2),X[i]], [Z[i]+0.05*np.sin(Phi[i]+np.pi/2),Z[i]])
+
+        # Draw FK curve
+        if in_robot_frame:
+            XZ = get_FK([theta_extracted[i,0],theta_extracted[i,1],X[i],Z[i],Phi[i]],21)
+        else:
+            XZ = get_FK([theta_extracted[i,0],theta_extracted[i,1],0,0,0],21)
+        curve.set_color('tab:orange' if IK_converged[i,0] else 'tab:red')
+        curve.set_data(XZ[:,0], XZ[:,1])
+
+        # Draw marker positions
+        if in_robot_frame:
+            mid.set_offsets([X_mid[i],Z_mid[i]])
+            end.set_offsets([X_end[i],Z_end[i]])
+        else:
+            mid.set_offsets([fk_targets[i,0],fk_targets[i,1]])
+            end.set_offsets([fk_targets[i,2],fk_targets[i,3]])
+
+        if in_robot_frame:
+            plt.xlim(XZ[0,0]-(p_vals[2]+0.1), XZ[0,0]+(p_vals[2]+0.1))
+            plt.ylim(XZ[0,1]-(p_vals[2]+0.1), XZ[0,1]+0.1)
+
+        writer.grab_frame()
+
+    plt.close(fig)
+
+#%%
+# Animation in robot frame
+
 
 #%%
 # # Filtering test
