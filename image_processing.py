@@ -20,8 +20,8 @@ def showim(img):
         cv2.destroyAllWindows()
 
 def plot_markers(idx, plot_mask=True, save=False):
-    img_name = os.listdir(img_folder)[idx]
-    img = cv2.cvtColor(cv2.imread(img_folder + img_name), cv2.COLOR_BGR2RGB)
+    img_name = os.listdir(img_dir)[idx]
+    img = cv2.cvtColor(cv2.imread(img_dir + img_name), cv2.COLOR_BGR2RGB)
 
     fig = plt.figure(figsize=(7.5, 6))
     ax = fig.add_subplot(autoscale_on=False)
@@ -42,9 +42,9 @@ def plot_markers(idx, plot_mask=True, save=False):
     # ax.plot(110,460,'y,') # For checking difference between projection and image
     
     if save:
-        if not os.path.exists(img_folder + 'detections'):
-            os.makedirs(img_folder + 'detections')
-        plt.savefig(img_folder + '/detections/' + img_name[:-4] + '_d.png', bbox_inches='tight', pad_inches=0.1)
+        if not os.path.exists(img_dir + 'detections'):
+            os.makedirs(img_dir + 'detections')
+        plt.savefig(img_dir + '/detections/' + img_name[:-4] + '_d.png', bbox_inches='tight', pad_inches=0.1)
 
 # Pixel to 3D conversions
 def UV_to_XZplane(u,v):
@@ -54,14 +54,14 @@ def UV_to_XZplane(u,v):
     sol = np.linalg.inv(rhs1)@rhs2
     return sol[:3]
 
-# Todo - torubleshoot/fix depth & clean up, or remove
-def UV_to_XYZ(u,v):
-    rhs1 = np.hstack([K_cam,np.array([[-u,-v,-1]]).T])
-    rhs1 = np.vstack([rhs1, np.array([0,0,1,0])])   # Intersect Z=depth plane
-    rhs2 = np.array([[0],[0,],[0],[dimg[v,u]/1000]])
-    sol = np.linalg.inv(rhs1)@rhs2
-    sol = E_base@sol
-    return sol[:3]
+# # Todo - troubleshoot/fix depth & clean up, or remove
+# def UV_to_XYZ(u,v):
+#     rhs1 = np.hstack([K_cam,np.array([[-u,-v,-1]]).T])
+#     rhs1 = np.vstack([rhs1, np.array([0,0,1,0])])   # Intersect Z=depth plane
+#     rhs2 = np.array([[0],[0,],[0],[dimg[v,u]/1000]])
+#     sol = np.linalg.inv(rhs1)@rhs2
+#     sol = E_base@sol
+#     return sol[:3]
 
 #%%
 # Paths - TODO check if this works at all
@@ -107,7 +107,7 @@ P = K_cam@E_cam
 
 #%%
 # Process each image in folder
-img_folder = data_dir + 'images/'
+img_dir = data_dir + 'images/'
 
 mid_positions_px = []
 end_positions_px = []
@@ -129,8 +129,8 @@ upper_G = np.array([80,255,255])
 lower_B = np.array([90,100,20])
 upper_B = np.array([130,255,255])
 
-for img_name in os.listdir(img_folder):
-    img = cv2.imread(img_folder + img_name)
+for img_name in os.listdir(img_dir):
+    img = cv2.imread(img_dir + img_name)
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
     mask_G = cv2.inRange(hsv, lower_G, upper_G)
@@ -188,9 +188,9 @@ end_positions_XZplane = np.array(end_positions_XZplane)
 t_markers = np.array(marker_ts, dtype=np.float64)
 t_markers = (t_markers - t_markers[0])/1e9
 
-# For depth
-mid_positions_XYZ = np.array(mid_positions_XYZ)
-end_positions_XYZ = np.array(end_positions_XYZ)
+# # For depth
+# mid_positions_XYZ = np.array(mid_positions_XYZ)
+# end_positions_XYZ = np.array(end_positions_XYZ)
 
 #%%
 # Export to csv
