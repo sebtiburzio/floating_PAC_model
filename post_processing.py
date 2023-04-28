@@ -2,13 +2,16 @@
 #%%
 
 import sys
+import os
 import pickle
+import cv2
 import numpy as np
 import mpmath as mp
 import sympy as sm
 from scipy import signal
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
+from matplotlib.animation import FFMpegWriter
 
 #%%
 # For plotting multiple data in a normalised time window
@@ -59,6 +62,29 @@ def plot_FK(q_repl):
     ax.grid(True)
     plt.show()
 
+def plot_on_image(idx):
+    img_name = '/' + Img[idx] + '.jpg'
+    img = cv2.cvtColor(cv2.imread(img_dir + img_name), cv2.COLOR_BGR2RGB)
+    fig, ax = plt.subplots()
+    ax.imshow(img,alpha=0.5)
+    # Base and marker positions
+    base_XYZ = np.array([X[idx],0.0,Z[idx],1.0])
+    base_proj = P@base_XYZ
+    mid_XYZ = np.array([X_mid[idx],0.0,Z_mid[idx],1.0])
+    mid_proj = P@mid_XYZ
+    end_XYZ = np.array([X_end[idx],0.0,Z_end[idx],1.0])
+    end_proj = P@end_XYZ
+    ax.scatter(base_proj[0]/base_proj[2],base_proj[1]/base_proj[2],s=2,c='tab:red',zorder=2.5)
+    ax.scatter(mid_proj[0]/mid_proj[2],mid_proj[1]/mid_proj[2],s=2,c='tab:green',zorder=2.5)
+    ax.scatter(end_proj[0]/end_proj[2],end_proj[1]/end_proj[2],s=2,c='tab:blue',zorder=2.5)
+    # Extracted FK
+    XZ = get_FK([theta_extracted[idx,0],theta_extracted[idx,1],X[idx],Z[idx],Phi[idx]],21)
+    curve_XYZ = np.vstack([XZ[:,0],np.zeros((XZ.shape[0],)),XZ[:,1],np.ones((XZ.shape[0],))])
+    curve_proj = P@curve_XYZ
+    ax.plot(curve_proj[0]/curve_proj[2],curve_proj[1]/curve_proj[2],c='tab:orange' if IK_converged[idx,0] else 'tab:red')
+    plt.show()
+
+
 def get_FK(q_repl,num_pts=21):
     s_evals = np.linspace(0,1,num_pts)
     FK_evals = np.zeros((s_evals.size,2,1))
@@ -107,7 +133,8 @@ def eval_J_endpt(theta, p_vals): return np.array(f_J_end(theta, p_vals).apply(mp
 
 #%%
 # Import csv data
-data_dir = './paramID_data/0417/rot_link6_w_mass' # + sys.argv[2]
+data_dir = './paramID_data/0417/sine_x_w_mass' # + sys.argv[2]
+img_dir = data_dir + '/images'
 O_T_EE = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1)
 markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows=1)
 W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1)
@@ -138,7 +165,7 @@ Fx_meas = W[:,1] # TODO - adjust F/T meas due to offset from FT frame?
 Fz_meas = W[:,3]
 Ty_meas = W[:,5]
 
-# Interpolate to uniform sample times
+# Interpolate to uniform sample times # TODO - double check, is there any desynching of times happeneing here?
 freq_target = 30
 t_target = np.arange(0, t_end, 1/freq_target)
 X = np.interp(t_target, t_OTEE, X_meas)
@@ -156,6 +183,11 @@ Ty_90Hz = np.interp(t_90Hz, t_W, Ty_meas)
 Fx = signal.decimate(Fx_90Hz, 3)   # Downsample to 30Hz
 Fz = signal.decimate(Fz_90Hz, 3)
 Ty = signal.decimate(Ty_90Hz, 3)
+# Match images to target timesteps
+img_list = np.asarray([filename.split('.')[0] for filename in os.listdir(img_dir)])
+t_img = (img_list.astype(float)-timestamp_begin)/1e9
+idxs = [(np.abs(t_img - t_t)).argmin() for t_t in t_target]
+Img = [img_list[i] for i in idxs]
 
 #%%
 # Transform marker points to fixed PAC frame (subtract X/Z, rotate back phi)
@@ -225,13 +257,10 @@ for n in range(fk_targets.shape[0]):
 # plt.xlim(0,0.7)
 
 #%%
-# Animation imports
+# Curvature extraction animation
 import matplotlib
 matplotlib.use("Agg")
-from matplotlib.animation import FFMpegWriter
 
-#%%
-# Curvature extraction animation
 writer = FFMpegWriter(fps=freq_target)
 
 fig, ax = plt.subplots()
@@ -244,17 +273,15 @@ plt.ylim(-(p_vals[2]+0.1), 0.1)
 ax.set_aspect('equal')
 ax.grid(True)
 
-in_robot_frame = False
+in_robot_frame = True
 
-with writer.saving(fig, 'test.mp4', 200):
+with writer.saving(fig, 'curvature_anim_robot.mp4', 200):
     for i in range(fk_targets.shape[0]):
         if i % freq_target == 0:
             print('Generating animation, ' + str(i/freq_target) + ' of ' + str(t_end) + 's')
-
         # Draw base
         if in_robot_frame:
             base.set_data([X[i]-0.05*np.cos(Phi[i]+np.pi/2),X[i]], [Z[i]+0.05*np.sin(Phi[i]+np.pi/2),Z[i]])
-
         # Draw FK curve
         if in_robot_frame:
             XZ = get_FK([theta_extracted[i,0],theta_extracted[i,1],X[i],Z[i],Phi[i]],21)
@@ -262,7 +289,6 @@ with writer.saving(fig, 'test.mp4', 200):
             XZ = get_FK([theta_extracted[i,0],theta_extracted[i,1],0,0,0],21)
         curve.set_color('tab:orange' if IK_converged[i,0] else 'tab:red')
         curve.set_data(XZ[:,0], XZ[:,1])
-
         # Draw marker positions
         if in_robot_frame:
             mid.set_offsets([X_mid[i],Z_mid[i]])
@@ -270,7 +296,7 @@ with writer.saving(fig, 'test.mp4', 200):
         else:
             mid.set_offsets([fk_targets[i,0],fk_targets[i,1]])
             end.set_offsets([fk_targets[i,2],fk_targets[i,3]])
-
+        # Centre plot
         if in_robot_frame:
             plt.xlim(XZ[0,0]-(p_vals[2]+0.1), XZ[0,0]+(p_vals[2]+0.1))
             plt.ylim(XZ[0,1]-(p_vals[2]+0.1), XZ[0,1]+0.1)
@@ -279,9 +305,68 @@ with writer.saving(fig, 'test.mp4', 200):
 
     plt.close(fig)
 
-#%%
-# Animation in robot frame
+matplotlib.use('module://matplotlib_inline.backend_inline')
 
+#%%
+# Camera intrinsic and extrinsic transforms - copied from image_processing - TODO - make better (in both)
+# K matrix from saved camera info
+# HACK - extracting values manually from calibration files... mega hacky but... it'll do? Until anything at all changes and breaks it
+# Probably save it as a nicer numpy format when doing bagfile extraction
+K_line = np.loadtxt(data_dir + '/color_camera_info.txt', dtype='str', delimiter=',', skiprows=10, max_rows=1)
+K_cam = np.array([[float(K_line[0][4:]), 0.0, float(K_line[2])], 
+                  [0.0, float(K_line[4]), float(K_line[5])], 
+                  [0.0, 0.0, 1.0]])
+
+R_line = np.loadtxt(data_dir + '/../calib_' + '0417' + '.launch', dtype='str', delimiter=' ', skiprows=5, max_rows=1)
+R_cam = R.from_quat([float(R_line[11]), float(R_line[12]), float(R_line[13]), float(R_line[14])]).as_matrix() # cam to base frame
+T_cam = np.array([[float(R_line[6][6:])],[float(R_line[7])],[float(R_line[8])]])
+                 
+E_base = np.hstack([R_cam, T_cam]) # cam to base frame
+E_cam = np.hstack([R_cam.T, -R_cam.T@T_cam]) # base to cam frame
+P = K_cam@E_cam
+
+#%%
+# Animation over camera image
+import matplotlib
+matplotlib.use("Agg")
+
+writer = FFMpegWriter(fps=freq_target)
+
+fig, ax = plt.subplots()
+image = plt.imshow(np.zeros((720,1280,3)), alpha=0.5) # TODO - get img resolution?
+base = plt.scatter([], [], s=2, c='tab:red',marker='+',zorder=2.5)
+mid = plt.scatter([], [], s=2, c='tab:green',zorder=2.5)
+end = plt.scatter([], [], s=2, c='tab:blue',zorder=2.5)
+curve, = plt.plot([], [])
+
+with writer.saving(fig, 'overlay_anim.mp4', 200):
+    for idx in range(fk_targets.shape[0]):
+        if idx % freq_target == 0:
+            print('Generating animation, ' + str(idx/freq_target) + ' of ' + str(t_end) + 's')
+
+        img_name = '/' + Img[idx] + '.jpg'
+        img = cv2.cvtColor(cv2.imread(img_dir + img_name), cv2.COLOR_BGR2RGB)
+        image.set_data(img)
+        # Base and marker positions
+        base_XYZ = np.array([X[idx],0.0,Z[idx],1.0])
+        base_proj = P@base_XYZ
+        mid_XYZ = np.array([X_mid[idx],0.0,Z_mid[idx],1.0])
+        mid_proj = P@mid_XYZ
+        end_XYZ = np.array([X_end[idx],0.0,Z_end[idx],1.0])
+        end_proj = P@end_XYZ
+        base.set_offsets([base_proj[0]/base_proj[2],base_proj[1]/base_proj[2]])
+        mid.set_offsets([mid_proj[0]/mid_proj[2],mid_proj[1]/mid_proj[2]])
+        end.set_offsets([end_proj[0]/end_proj[2],end_proj[1]/end_proj[2]])
+        # Extracted FK
+        XZ = get_FK([theta_extracted[idx,0],theta_extracted[idx,1],X[idx],Z[idx],Phi[idx]],21)
+        curve_XYZ = np.vstack([XZ[:,0],np.zeros((XZ.shape[0],)),XZ[:,1],np.ones((XZ.shape[0],))])
+        curve_proj = P@curve_XYZ
+        curve.set_color('tab:orange' if IK_converged[idx,0] else 'tab:red')
+        curve.set_data(curve_proj[0]/curve_proj[2],curve_proj[1]/curve_proj[2])
+
+        writer.grab_frame()
+
+    plt.close(fig)
 
 #%%
 # # Filtering test
