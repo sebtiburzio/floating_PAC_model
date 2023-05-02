@@ -84,7 +84,6 @@ def plot_on_image(idx):
     ax.plot(curve_proj[0]/curve_proj[2],curve_proj[1]/curve_proj[2],c='tab:orange' if IK_converged[idx,0] else 'tab:red')
     plt.show()
 
-
 def get_FK(q_repl,num_pts=21):
     s_evals = np.linspace(0,1,num_pts)
     FK_evals = np.zeros((s_evals.size,2,1))
@@ -132,38 +131,43 @@ def eval_J_midpt(theta, p_vals): return np.array(f_J_mid(theta, p_vals).apply(mp
 def eval_J_endpt(theta, p_vals): return np.array(f_J_end(theta, p_vals).apply(mp.re).tolist(), dtype=float)
 
 #%%
-# Import csv data
+# Import data
 data_dir = './paramID_data/0417/sine_x_w_mass' # + sys.argv[2]
 img_dir = data_dir + '/images'
-O_T_EE = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1)
-markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows=1)
-W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1)
+# Timestamps
+ts_OTEE = np.loadtxt(data_dir + '/EE_pose.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
+ts_markers = np.loadtxt(data_dir + '/marker_positions.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
+ts_W = np.loadtxt(data_dir + '/EE_wrench.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
 # Rescale timestamps to seconds since first msg
-timestamp_begin = np.max([np.min(O_T_EE[:,0]), np.min(markers[:,0]), np.min(W[:,0])])
-timestamp_end = np.min([np.max(O_T_EE[:,0]), np.max(markers[:,0]), np.max(W[:,0])])
-t_OTEE = (O_T_EE[:,0]-timestamp_begin)/1e9
-t_markers = (markers[:,0]-timestamp_begin)/1e9
-t_W = (W[:,0]-timestamp_begin)/1e9
-t_end = (timestamp_end - timestamp_begin)/1e9
+ts_begin = np.max([np.min(ts_OTEE), np.min(ts_markers), np.min(ts_W)])
+ts_end = np.min([np.max(ts_OTEE), np.max(ts_markers), np.max(ts_W)])
+t_OTEE = ts_OTEE/1e9-ts_begin/1e9
+t_markers = ts_markers/1e9-ts_begin/1e9 -0.072903058 # HACK - manual offset for measured camera delay
+t_W = ts_W/1e9-ts_begin/1e9
+t_end = ts_end/1e9-ts_begin/1e9
+# Measurements
+O_T_EE = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1, usecols=range(1,17))
+markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows=1, usecols=range(1,5))
+W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=range(1,7))
 
 # Physical definitions for object set up
 p_vals = [1.0, 1.0, 0.75, 0.015]
 base_offset = 0.0 # Z-dir offset of cable attachment point from measured robot EE frame
 
 # Copy relevant planar data
-RPY_meas = R.from_matrix(np.array([[O_T_EE[:,1], O_T_EE[:,2],O_T_EE[:,3]],
-                                   [O_T_EE[:,5], O_T_EE[:,6],O_T_EE[:,7]],
-                                   [O_T_EE[:,9], O_T_EE[:,10],O_T_EE[:,11]]]).T).as_euler('xyz', degrees=False)
+RPY_meas = R.from_matrix(np.array([[O_T_EE[:,0], O_T_EE[:,1],O_T_EE[:,2]],
+                                   [O_T_EE[:,4], O_T_EE[:,5],O_T_EE[:,6]],
+                                   [O_T_EE[:,8], O_T_EE[:,9],O_T_EE[:,10]]]).T).as_euler('xyz', degrees=False)
 Phi_meas = RPY_meas[:,1]
-X_meas = O_T_EE[:,13] + base_offset*np.cos(Phi_meas)
-Z_meas = O_T_EE[:,15] + base_offset*np.sin(Phi_meas)
-X_mid_meas = markers[:,1]
-Z_mid_meas = markers[:,2]
-X_end_meas = markers[:,3]
-Z_end_meas = markers[:,4]
-Fx_meas = W[:,1] # TODO - adjust F/T meas due to offset from FT frame?
-Fz_meas = W[:,3]
-Ty_meas = W[:,5]
+X_meas = O_T_EE[:,12] + base_offset*np.cos(Phi_meas) # Move robot EE position to cable attachment point
+Z_meas = O_T_EE[:,14] + base_offset*np.sin(Phi_meas)
+X_mid_meas = markers[:,0]
+Z_mid_meas = markers[:,1]
+X_end_meas = markers[:,2]
+Z_end_meas = markers[:,3]
+Fx_meas = W[:,0] # TODO - adjust F/T meas due to offset from FT frame?
+Fz_meas = W[:,2]
+Ty_meas = W[:,4]
 
 # Interpolate to uniform sample times # TODO - double check, is there any desynching of times happeneing here?
 freq_target = 30
@@ -184,10 +188,8 @@ Fx = signal.decimate(Fx_90Hz, 3)   # Downsample to 30Hz
 Fz = signal.decimate(Fz_90Hz, 3)
 Ty = signal.decimate(Ty_90Hz, 3)
 # Match images to target timesteps
-img_list = np.asarray([filename.split('.')[0] for filename in os.listdir(img_dir)])
-t_img = (img_list.astype(float)-timestamp_begin)/1e9
-idxs = [(np.abs(t_img - t_t)).argmin() for t_t in t_target]
-Img = [img_list[i] for i in idxs]
+idxs = [(np.abs(t_markers - t_t)).argmin() for t_t in t_target] # find closest timstamp to each target timestep
+Img = np.array([ts_markers[i] for i in idxs], dtype=str)
 
 #%%
 # Transform marker points to fixed PAC frame (subtract X/Z, rotate back phi)
@@ -305,7 +307,7 @@ with writer.saving(fig, 'curvature_anim_robot.mp4', 200):
 
     plt.close(fig)
 
-matplotlib.use('module://matplotlib_inline.backend_inline')
+matplotlib.use('module://matplotlib_inline.backend_inline') # TODO -figure out how to actually switch back to inline plotting
 
 #%%
 # Camera intrinsic and extrinsic transforms - copied from image_processing - TODO - make better (in both)
@@ -339,7 +341,7 @@ mid = plt.scatter([], [], s=2, c='tab:green',zorder=2.5)
 end = plt.scatter([], [], s=2, c='tab:blue',zorder=2.5)
 curve, = plt.plot([], [])
 
-with writer.saving(fig, 'overlay_anim.mp4', 200):
+with writer.saving(fig, 'overlay_anim_delay.mp4', 200):
     for idx in range(fk_targets.shape[0]):
         if idx % freq_target == 0:
             print('Generating animation, ' + str(idx/freq_target) + ' of ' + str(t_end) + 's')
@@ -367,6 +369,8 @@ with writer.saving(fig, 'overlay_anim.mp4', 200):
         writer.grab_frame()
 
     plt.close(fig)
+
+matplotlib.use('module://matplotlib_inline.backend_inline')
 
 #%%
 # # Filtering test
