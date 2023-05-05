@@ -84,6 +84,15 @@ def plot_on_image(idx):
     ax.plot(curve_proj[0]/curve_proj[2],curve_proj[1]/curve_proj[2],c='tab:orange' if IK_converged[idx,0] else 'tab:red')
     plt.show()
 
+# Rotate 2D vectors on XY plane around robot +Y axis
+def rot_XZ_on_Y(XZ,angle):
+    R_angle = np.array([[np.cos(-angle), np.sin(-angle)], 
+                        [-np.sin(-angle), np.cos(-angle)]]).T
+    if len(XZ.shape) == 1:
+        return R_angle@XZ
+    else:
+        return np.einsum('ijk,ik->ij', R_angle, XZ)
+
 def get_FK(q_repl,num_pts=21):
     s_evals = np.linspace(0,1,num_pts)
     FK_evals = np.zeros((s_evals.size,2,1))
@@ -193,12 +202,9 @@ Img = np.array([ts_markers[i] for i in idxs], dtype=str)
 
 #%%
 # Transform marker points to fixed PAC frame (subtract X/Z, rotate back phi)
-fk_targets_mid = np.vstack([X_mid-X,np.zeros_like(X),Z_mid-Z]).T
-fk_targets_end = np.vstack([X_end-X,np.zeros_like(X),Z_end-Z]).T
-R_Phi = R.from_euler('y', -Phi, degrees=False).as_matrix()
-fk_targets_mid = np.einsum('ijk,ik->ij', R_Phi, fk_targets_mid)
-fk_targets_end = np.einsum('ijk,ik->ij', R_Phi, fk_targets_end)
-fk_targets = np.hstack([fk_targets_mid[:,(0,2)], fk_targets_end[:,(0,2)]])
+fk_targets_mid = np.vstack([X_mid-X,Z_mid-Z]).T
+fk_targets_end = np.vstack([X_end-X,Z_end-Z]).T
+fk_targets = np.hstack([rot_XZ_on_Y(fk_targets_mid,-Phi), rot_XZ_on_Y(fk_targets_end,-Phi)])
 
 theta_extracted = np.zeros((fk_targets.shape[0],2,))
 theta_guess = np.array([1e-3, 1e-3])
@@ -270,20 +276,27 @@ base, = plt.plot([], [], c='k')
 curve, = plt.plot([], [])
 mid = plt.scatter([], [], s=2, c='tab:green',zorder=2.5)
 end = plt.scatter([], [], s=2, c='tab:blue',zorder=2.5)
+Fx_vis,  = plt.plot([], [], c='r')
+Fz_vis,  = plt.plot([], [], c='b')
+Ty_vis,  = plt.plot([], [], c='g')
+Ty_vis_angs = np.arange(0,np.pi,np.pi/10)
 plt.xlim(-(p_vals[2]+0.1), (p_vals[2]+0.1))
 plt.ylim(-(p_vals[2]+0.1), 0.1)
 ax.set_aspect('equal')
 ax.grid(True)
 
+draw_FT = False
 in_robot_frame = True
+post = '_robot' if in_robot_frame else ''
 
-with writer.saving(fig, 'curvature_anim_robot.mp4', 200):
+with writer.saving(fig, data_dir + '/curvature_anim' + post + '.mp4', 200):
     for i in range(fk_targets.shape[0]):
         if i % freq_target == 0:
             print('Generating animation, ' + str(i/freq_target) + ' of ' + str(t_end) + 's')
         # Draw base
         if in_robot_frame:
-            base.set_data([X[i]-0.05*np.cos(Phi[i]+np.pi/2),X[i]], [Z[i]+0.05*np.sin(Phi[i]+np.pi/2),Z[i]])
+            base_vis = rot_XZ_on_Y(np.array([0,0.05]),Phi[i])
+            base.set_data([X[i],X[i]+base_vis[0]], [Z[i],Z[i]+base_vis[1]])
         # Draw FK curve
         if in_robot_frame:
             XZ = get_FK([theta_extracted[i,0],theta_extracted[i,1],X[i],Z[i],Phi[i]],21)
@@ -298,6 +311,20 @@ with writer.saving(fig, 'curvature_anim_robot.mp4', 200):
         else:
             mid.set_offsets([fk_targets[i,0],fk_targets[i,1]])
             end.set_offsets([fk_targets[i,2],fk_targets[i,3]])
+        # Draw Forces/Moments
+        if draw_FT:
+            if in_robot_frame:
+                Fx_r = rot_XZ_on_Y(np.array([Fx[i],0]),Phi[i])
+                Fz_r = rot_XZ_on_Y(np.array([0,Fz[i]]),Phi[i])
+                Fx_vis.set_data([X[i], X[i]+0.1*Fx_r[0]], [Z[i], Z[i]+0.1*Fx_r[1]])
+                Fz_vis.set_data([X[i], X[i]+0.1*Fz_r[0]], [Z[i], Z[i]+0.1*Fz_r[1]])
+                Ty_vis.set_data(X[i]+Ty[i]*np.cos(Ty_vis_angs),Z[i]+Ty[i]*np.sin(Ty_vis_angs))
+                # Ty_r = np.array([X[i],Z[i]]) + rot_XZ_on_Y(np.array([Ty[i]*np.cos(Ty_vis_angs),Ty[i]*np.sin(Ty_vis_angs)]).T,np.full((10,),Phi[i]))
+                # Ty_vis.set_data([Ty_r[:,0], Ty_r[:,1]])
+            else:
+                Fx_vis.set_data([0, 0.1*Fx[i]],[0, 0])
+                Fz_vis.set_data([0, 0],[0, 0.1*Fz[i]])
+                Ty_vis.set_data(Ty[i]*np.cos(Ty_vis_angs),Ty[i]*np.sin(Ty_vis_angs))
         # Centre plot
         if in_robot_frame:
             plt.xlim(XZ[0,0]-(p_vals[2]+0.1), XZ[0,0]+(p_vals[2]+0.1))
@@ -341,7 +368,7 @@ mid = plt.scatter([], [], s=2, c='tab:green',zorder=2.5)
 end = plt.scatter([], [], s=2, c='tab:blue',zorder=2.5)
 curve, = plt.plot([], [])
 
-with writer.saving(fig, 'overlay_anim_delay.mp4', 200):
+with writer.saving(fig, data_dir + '/overlay_anim.mp4', 200):
     for idx in range(fk_targets.shape[0]):
         if idx % freq_target == 0:
             print('Generating animation, ' + str(idx/freq_target) + ' of ' + str(t_end) + 's')
