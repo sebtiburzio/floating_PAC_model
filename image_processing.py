@@ -80,8 +80,8 @@ print('Path: ' + data_dir)
 
 #%%
 # Manual paths for interactive mode
-dataset_name = 'rot_link6_w_mass'
-data_date = '0417'
+dataset_name = 'sine_x_15FPS'
+data_date = '0508'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name + '/'
 
 print('Dataset: ' + dataset_name)
@@ -124,12 +124,17 @@ marker_ts = []
 # didx = 0
 
 # Mask range for green and blue markers
+# lower_R = np.array([0,80,20])
+# upper_R = np.array([10,255,255])
 lower_G = np.array([20,80,20])
 upper_G = np.array([80,255,255])
 lower_B = np.array([90,100,20])
 upper_B = np.array([130,255,255])
 
-for img_name in os.listdir(img_dir):
+imgs = os.listdir(img_dir)
+imgs.sort()
+
+for img_name in imgs:
     img = cv2.imread(img_dir + img_name)
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
@@ -185,7 +190,7 @@ mid_positions_px = np.array(mid_positions_px)
 end_positions_px = np.array(end_positions_px)
 mid_positions_XZplane = np.array(mid_positions_XZplane)
 end_positions_XZplane = np.array(end_positions_XZplane)
-t_markers = np.array(marker_ts, dtype=np.float64)
+t_markers = np.array(marker_ts, dtype=np.ulonglong)
 t_markers = (t_markers - t_markers[0])/1e9
 
 # # For depth
