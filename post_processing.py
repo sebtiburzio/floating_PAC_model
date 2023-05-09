@@ -43,6 +43,7 @@ def plot_XZ(t_s=0, t_f=1e3):
     plt.plot(X_mid[window],Z_mid[window],'tab:green')
     plt.plot(X_end[window],Z_end[window],'tab:blue')
     plt.axis('equal')
+    plt.grid(True)
 
 def plot_fk_targets(t_s=0, t_f=1e3):
     window = np.asarray((t_target >= t_s) & (t_target < t_f)).nonzero()
@@ -50,11 +51,14 @@ def plot_fk_targets(t_s=0, t_f=1e3):
     plt.plot(fk_targets[window,0].squeeze(),fk_targets[window,1].squeeze(),'tab:green')
     plt.plot(fk_targets[window,2].squeeze(),fk_targets[window,3].squeeze(),'tab:blue')
     plt.axis('equal')
+    plt.grid(True)
 
 def plot_FK(q_repl):
     FK_evals = get_FK(q_repl)
     fig, ax = plt.subplots()
     ax.plot(FK_evals[:,0],FK_evals[:,1],'tab:orange')
+    ax.scatter(FK_evals[10,0],FK_evals[10,1],s=2,c='m',zorder=2.5)
+    ax.scatter(FK_evals[-1,0],FK_evals[-1,1],s=2,c='m',zorder=2.5)
     plt.xlim(FK_evals[0,0]-0.8,FK_evals[0,0]+0.8)
     plt.ylim(FK_evals[0,1]-0.8,FK_evals[0,1]+0.2)
     fig.set_figwidth(8)
@@ -80,8 +84,10 @@ def plot_on_image(idx):
     # Extracted FK
     XZ = get_FK([theta_extracted[idx,0],theta_extracted[idx,1],X[idx],Z[idx],Phi[idx]],21)
     curve_XYZ = np.vstack([XZ[:,0],np.zeros((XZ.shape[0],)),XZ[:,1],np.ones((XZ.shape[0],))])
-    curve_proj = P@curve_XYZ
-    ax.plot(curve_proj[0]/curve_proj[2],curve_proj[1]/curve_proj[2],c='tab:orange' if IK_converged[idx,0] else 'tab:red')
+    FK_evals = P@curve_XYZ
+    ax.plot(FK_evals[0]/FK_evals[2],FK_evals[1]/FK_evals[2],c='tab:orange' if IK_converged[idx,0] else 'tab:red')
+    ax.scatter(FK_evals[0,10]/FK_evals[2,10],FK_evals[1,10]/FK_evals[2,10],s=2,c='m',zorder=2.5)
+    ax.scatter(FK_evals[0,-1]/FK_evals[2,-1],FK_evals[1,-1]/FK_evals[2,-1],s=2,c='m',zorder=2.5)
     plt.show()
 
 # Rotate 2D vectors on XY plane around robot +Y axis
@@ -140,8 +146,17 @@ def eval_J_midpt(theta, p_vals): return np.array(f_J_mid(theta, p_vals).apply(mp
 def eval_J_endpt(theta, p_vals): return np.array(f_J_end(theta, p_vals).apply(mp.re).tolist(), dtype=float)
 
 #%%
+# Data paths
+dataset_name = 'rot_link6_30FPS'
+data_date = '0508_desk'
+data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name  # TODO different in image_processing (extra '/' on end), maybe make same?
+
+print('Dataset: ' + dataset_name)
+print('Date: ' + data_date)
+print('Path: ' + data_dir)
+
+#%%
 # Import data
-data_dir = './paramID_data/0417/sine_x_w_mass' # + sys.argv[2]
 img_dir = data_dir + '/images'
 # Timestamps
 ts_OTEE = np.loadtxt(data_dir + '/EE_pose.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
@@ -160,7 +175,7 @@ markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows
 W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=range(1,7))
 
 # Physical definitions for object set up
-p_vals = [1.0, 1.0, 0.75, 0.015]
+p_vals = [1.0, 1.0, 0.745, 0.015]
 base_offset = 0.0 # Z-dir offset of cable attachment point from measured robot EE frame
 
 # Copy relevant planar data
@@ -197,8 +212,11 @@ Fx = signal.decimate(Fx_90Hz, 3)   # Downsample to 30Hz
 Fz = signal.decimate(Fz_90Hz, 3)
 Ty = signal.decimate(Ty_90Hz, 3)
 # Match images to target timesteps
-idxs = [(np.abs(t_markers - t_t)).argmin() for t_t in t_target] # find closest timstamp to each target timestep
+idxs = [(np.abs(t_markers - t_t)).argmin() for t_t in t_target] # find closest timestamp to each target timestep
 Img = np.array([ts_markers[i] for i in idxs], dtype=str)
+# # TODO - actually looks better with timestamps just shifted by approximate delay
+# # But marker data way off. Need to figure out how to properly sync
+# Img = np.array([ts_markers[i+2] for i in np.arange(len(ts_markers)-1)], dtype=str)
 
 #%%
 # Transform marker points to fixed PAC frame (subtract X/Z, rotate back phi)
@@ -221,48 +239,6 @@ for n in range(fk_targets.shape[0]):
     else:
         theta_guess = theta_n
         IK_converged[n,:] = 1
-
-#%%
-# # Finite difference derivatives 
-# dX = np.diff(X)/(1/freq_target)
-# ddX = np.diff(dX)/(1/freq_target)
-# dZ = np.diff(Z)/(1/freq_target)
-# ddZ = np.diff(dZ)/(1/freq_target)
-# dPhi = np.diff(Phi)/(1/freq_target)
-# ddPhi = np.diff(dPhi)/(1/freq_target)
-
-#%%
-# # Save data
-# np.savez(data_dir + '/processed', t=t_target, 
-#          X=X, Z=Z, Phi=Phi, Fx=Fx, Fz=Fz, Ty=Ty, 
-#          dX=dX, ddX=ddX, dZ=dZ, 
-#          ddZ=ddZ, dPhi=dPhi, ddPhi=ddPhi)
-
-#%%
-# # Plotting examples
-
-# Plot X
-# plt.plot(t_target[120:200],X[120:200])
-# plt.title('X')
-# plt.show()
-# plt.plot(t_W[380:620],Fx_meas[380:620])
-# plt.title('Fx')
-# plt.show()
-# plt.plot(t_target[100:170],Ty[100:170])
-# plt.title('Ty')
-# plt.show()
-# plt.plot(t_target[100:170],dX[100:170])
-# plt.title('dX')
-# plt.show()
-# plt.plot(t_target[100:170],ddX[100:170])
-# plt.title('ddX')
-# plt.show()
-
-# plt.plot(X_mid,Z_mid)
-# plt.plot(X_end,Z_end)
-# plt.plot(X,Z)
-# plt.axis('equal')
-# plt.xlim(0,0.7)
 
 #%%
 # Curvature extraction animation
@@ -289,7 +265,7 @@ draw_FT = False
 in_robot_frame = True
 post = '_robot' if in_robot_frame else ''
 
-with writer.saving(fig, data_dir + '/curvature_anim' + post + '.mp4', 200):
+with writer.saving(fig, data_dir + '/curvature_anim_changed_back' + post + '.mp4', 200):
     for i in range(fk_targets.shape[0]):
         if i % freq_target == 0:
             print('Generating animation, ' + str(i/freq_target) + ' of ' + str(t_end) + 's')
@@ -346,7 +322,7 @@ K_cam = np.array([[float(K_line[0][4:]), 0.0, float(K_line[2])],
                   [0.0, float(K_line[4]), float(K_line[5])], 
                   [0.0, 0.0, 1.0]])
 
-R_line = np.loadtxt(data_dir + '/../calib_' + '0417' + '.launch', dtype='str', delimiter=' ', skiprows=5, max_rows=1)
+R_line = np.loadtxt(data_dir + '/../calib_' + data_date + '.launch', dtype='str', delimiter=' ', skiprows=5, max_rows=1)
 R_cam = R.from_quat([float(R_line[11]), float(R_line[12]), float(R_line[13]), float(R_line[14])]).as_matrix() # cam to base frame
 T_cam = np.array([[float(R_line[6][6:])],[float(R_line[7])],[float(R_line[8])]])
                  
@@ -368,7 +344,7 @@ mid = plt.scatter([], [], s=2, c='tab:green',zorder=2.5)
 end = plt.scatter([], [], s=2, c='tab:blue',zorder=2.5)
 curve, = plt.plot([], [])
 
-with writer.saving(fig, data_dir + '/overlay_anim.mp4', 200):
+with writer.saving(fig, data_dir + '/overlay_anim_manual_shift.mp4', 200):
     for idx in range(fk_targets.shape[0]):
         if idx % freq_target == 0:
             print('Generating animation, ' + str(idx/freq_target) + ' of ' + str(t_end) + 's')
@@ -389,15 +365,57 @@ with writer.saving(fig, data_dir + '/overlay_anim.mp4', 200):
         # Extracted FK
         XZ = get_FK([theta_extracted[idx,0],theta_extracted[idx,1],X[idx],Z[idx],Phi[idx]],21)
         curve_XYZ = np.vstack([XZ[:,0],np.zeros((XZ.shape[0],)),XZ[:,1],np.ones((XZ.shape[0],))])
-        curve_proj = P@curve_XYZ
+        FK_evals = P@curve_XYZ
         curve.set_color('tab:orange' if IK_converged[idx,0] else 'tab:red')
-        curve.set_data(curve_proj[0]/curve_proj[2],curve_proj[1]/curve_proj[2])
+        curve.set_data(FK_evals[0]/FK_evals[2],FK_evals[1]/FK_evals[2])
 
         writer.grab_frame()
 
     plt.close(fig)
 
 matplotlib.use('module://matplotlib_inline.backend_inline')
+
+#%%
+# # Finite difference derivatives 
+# dX = np.diff(X)/(1/freq_target)
+# ddX = np.diff(dX)/(1/freq_target)
+# dZ = np.diff(Z)/(1/freq_target)
+# ddZ = np.diff(dZ)/(1/freq_target)
+# dPhi = np.diff(Phi)/(1/freq_target)
+# ddPhi = np.diff(dPhi)/(1/freq_target)
+
+#%%
+# # Save data
+# np.savez(data_dir + '/processed', t=t_target, 
+#          X=X, Z=Z, Phi=Phi, Fx=Fx, Fz=Fz, Ty=Ty, 
+#          dX=dX, ddX=ddX, dZ=dZ, 
+#          ddZ=ddZ, dPhi=dPhi, ddPhi=ddPhi)
+
+#%%
+# # Plotting examples
+
+# Plot X
+# plt.plot(t_target[120:200],X[120:200])
+# plt.title('X')
+# plt.show()
+# plt.plot(t_W[380:620],Fx_meas[380:620])
+# plt.title('Fx')
+# plt.show()
+# plt.plot(t_target[100:170],Ty[100:170])
+# plt.title('Ty')
+# plt.show()
+# plt.plot(t_target[100:170],dX[100:170])
+# plt.title('dX')
+# plt.show()
+# plt.plot(t_target[100:170],ddX[100:170])
+# plt.title('ddX')
+# plt.show()
+
+# plt.plot(X_mid,Z_mid)
+# plt.plot(X_end,Z_end)
+# plt.plot(X,Z)
+# plt.axis('equal')
+# plt.xlim(0,0.7)
 
 #%%
 # # Filtering test
