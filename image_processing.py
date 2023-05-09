@@ -19,6 +19,16 @@ def showim(img):
     if k == 27:         # wait for ESC key to exit
         cv2.destroyAllWindows()
 
+def plotim(idx):
+    img = cv2.cvtColor(cv2.imread(img_dir + imgs[idx]), cv2.COLOR_BGR2RGB)
+    fig = plt.figure(figsize=(14, 12))
+    ax = fig.add_subplot(autoscale_on=False)
+    ax.set_aspect('equal')
+    ax.grid()
+    ax.set_xlim(0,img.shape[1])
+    ax.set_ylim(0,img.shape[0])
+    ax.imshow(img)
+
 def plot_markers(idx, plot_mask=True, save=False):
     img_name = os.listdir(img_dir)[idx]
     img = cv2.cvtColor(cv2.imread(img_dir + img_name), cv2.COLOR_BGR2RGB)
@@ -81,12 +91,19 @@ print('Path: ' + data_dir)
 #%%
 # Manual paths for interactive mode
 dataset_name = 'sine_x_15FPS'
-data_date = '0508'
+data_date = '0508_tripod'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name + '/'
 
 print('Dataset: ' + dataset_name)
 print('Date: ' + data_date)
 print('Path: ' + data_dir)
+
+#%%
+# Get img list and display first with grid
+img_dir = data_dir + 'images/'
+imgs = os.listdir(img_dir)
+imgs.sort()
+plotim(0)
 
 #%%
 # Camera intrinsic and extrinsic transforms
@@ -107,7 +124,6 @@ P = K_cam@E_cam
 
 #%%
 # Process each image in folder
-img_dir = data_dir + 'images/'
 
 mid_positions_px = []
 end_positions_px = []
@@ -131,9 +147,6 @@ upper_G = np.array([80,255,255])
 lower_B = np.array([90,100,20])
 upper_B = np.array([130,255,255])
 
-imgs = os.listdir(img_dir)
-imgs.sort()
-
 for img_name in imgs:
     img = cv2.imread(img_dir + img_name)
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -141,11 +154,11 @@ for img_name in imgs:
     mask_G = cv2.inRange(hsv, lower_G, upper_G)
     mask_B = cv2.inRange(hsv, lower_B, upper_B)
 
-    # Crop above base
-    mask_G[:,1000:] = 0
-    mask_B[:,900:] = 0
+    # Crop above base (change depending on img orientation)
+    mask_G[:,:500] = 0
+    mask_B[:,:800] = 0
     # Crop trouble areas creating some spurious readings - TODO proper solution, outlier resistant
-    mask_G[:,:125] = 0
+    mask_G[:,800:] = 0
     # mask_B[:25,:] = 0
 
     # Remove noise from mask
@@ -196,6 +209,10 @@ t_markers = (t_markers - t_markers[0])/1e9
 # # For depth
 # mid_positions_XYZ = np.array(mid_positions_XYZ)
 # end_positions_XYZ = np.array(end_positions_XYZ)
+
+# Check for false detections
+plt.plot(mid_positions_px[:,0])
+plt.plot(end_positions_px[:,1])
 
 #%%
 # Export to csv
