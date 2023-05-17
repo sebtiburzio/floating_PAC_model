@@ -28,6 +28,7 @@ def plotim(idx):
     ax.set_xlim(0,img.shape[1])
     ax.set_ylim(0,img.shape[0])
     ax.imshow(img)
+    ax.scatter(EE_start[0],EE_start[1],s=5,c='y')
 
 def plot_markers(idx, plot_mask=True, save=False):
     img_name = os.listdir(img_dir)[idx]
@@ -51,7 +52,6 @@ def plot_markers(idx, plot_mask=True, save=False):
     ax.plot(base_positions_px[idx,1],base_positions_px[idx,0],ms=2,fillstyle='none',marker='o',mec=marker_colors[0])
     ax.plot(mid_positions_px[idx,1],mid_positions_px[idx,0],ms=2,fillstyle='none',marker='o',mec=marker_colors[1])
     ax.plot(end_positions_px[idx,1],end_positions_px[idx,0],ms=2,fillstyle='none',marker='o',mec=marker_colors[2])
-    # ax.plot(110,460,'y,') # For checking difference between projection and image
     
     if save:
         if not os.path.exists(img_dir + 'detections'):
@@ -59,10 +59,10 @@ def plot_markers(idx, plot_mask=True, save=False):
         plt.savefig(img_dir + '/detections/' + img_name[:-4] + '_d.png', bbox_inches='tight', pad_inches=0.1)
 
 # Pixel to 3D conversions
-def UV_to_XZplane(u,v):
+def UV_to_XZplane(u,v,Y=0):
     rhs1 = np.hstack([P[:,:3],np.array([[-u,-v,-1]]).T])
-    rhs1 = np.vstack([rhs1, np.array([0,1,0,0])])   # Intersect Y=0 plane
-    rhs2 = np.reshape(np.hstack([-P[:,3],[0]]),(4,1))
+    rhs1 = np.vstack([rhs1, np.array([0,1,0,0])])   # Intersect y=Y plane
+    rhs2 = np.reshape(np.hstack([-P[:,3],[Y]]),(4,1))
     sol = np.linalg.inv(rhs1)@rhs2
     return sol[:3]
 
@@ -92,20 +92,13 @@ print('Path: ' + data_dir)
 
 #%%
 # Manual paths for interactive mode
-dataset_name = 'rot_link6_15FPS'
+dataset_name = 'sine_x_30FPS'
 data_date = '0508_tripod'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name + '/'
 
 print('Dataset: ' + dataset_name)
 print('Date: ' + data_date)
 print('Path: ' + data_dir)
-
-#%%
-# Get img list and display first with grid
-img_dir = data_dir + 'images/'
-imgs = os.listdir(img_dir)
-imgs.sort()
-plotim(0)
 
 #%%
 # Camera intrinsic and extrinsic transforms
@@ -123,6 +116,16 @@ T_cam = np.array([[float(R_line[6][6:])],[float(R_line[7])],[float(R_line[8])]])
 E_base = np.hstack([R_cam, T_cam]) # cam to base frame
 E_cam = np.hstack([R_cam.T, -R_cam.T@T_cam]) # base to cam frame
 P = K_cam@E_cam
+
+#%%
+# Get img list and display first with grid
+img_dir = data_dir + 'images/'
+imgs = os.listdir(img_dir)
+imgs.sort()
+# Plot initial EE location to check camera calibration
+EE_start = P@np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1, max_rows=1, usecols=range(13,17))
+EE_start = EE_start/EE_start[2]
+plotim(0)
 
 #%%
 # Process each image in folder
@@ -193,10 +196,10 @@ for img_name in imgs:
     base_pos_px = np.round(center_of_mass(mask_R)).astype(int)
     mid_pos_px = np.round(center_of_mass(mask_G)).astype(int)
     end_pos_px = np.round(center_of_mass(mask_B)).astype(int)
-    # Convert px location to world frame, assuming on Y=0 plane TODO - account for cable thickness? More important for base marker.
-    base_pos_XZplane = UV_to_XZplane(base_pos_px[1],base_pos_px[0])
-    mid_pos_XZplane = UV_to_XZplane(mid_pos_px[1],mid_pos_px[0])
-    end_pos_XZplane = UV_to_XZplane(end_pos_px[1],end_pos_px[0])
+    # Convert px location to world frame
+    base_pos_XZplane = UV_to_XZplane(base_pos_px[1],base_pos_px[0],Y=0.05) # TODO - measure actual R marker distance from plane
+    mid_pos_XZplane = UV_to_XZplane(mid_pos_px[1],mid_pos_px[0],Y=0) # TODO - offset cable thickness?
+    end_pos_XZplane = UV_to_XZplane(end_pos_px[1],end_pos_px[0],Y=0)
 
     # # Convert px location to world frame, using depth measurement
     # dimg = cv2.imread(data_dir + 'depth/' + dimg_list[didx], cv2.IMREAD_UNCHANGED)

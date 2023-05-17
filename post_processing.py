@@ -66,10 +66,28 @@ def plot_FK(q_repl):
     ax.grid(True)
     plt.show()
 
+def plot_calib_check():
+    img = cv2.cvtColor(cv2.imread(img_dir + '/' + str(ts_markers[0]) + '.jpg'), cv2.COLOR_BGR2RGB)
+    _, ax = plt.subplots()
+    ax.imshow(img,alpha=0.5)
+    # End effector measured by robot
+    EE_XYZ = np.array([O_T_EE[0,12],0.0,O_T_EE[0,14],1.0])
+    EE_X_axis = np.array([O_T_EE[0,12]+0.05,0.0,O_T_EE[0,14],1.0]) # HACK - only if Phi_meas[0] = 0
+    EE_Z_axis = np.array([O_T_EE[0,12],0.0,O_T_EE[0,14]-0.05,1.0]) #
+    EE_proj = P@EE_XYZ
+    EE_X_axis_proj = P@EE_X_axis
+    EE_Z_axis_proj = P@EE_Z_axis
+    # Base of cable incorporating offset from EE
+    base_XYZ = np.array([X_meas[0],0.0,Z_meas[0],1.0])
+    base_proj = P@base_XYZ
+    ax.scatter(base_proj[0]/base_proj[2],base_proj[1]/base_proj[2],s=2,c='yellow',zorder=2.5)
+    # Planar axes
+    ax.plot([EE_proj[0]/EE_proj[2],EE_X_axis_proj[0]/EE_X_axis_proj[2]],[EE_proj[1]/EE_proj[2],EE_X_axis_proj[1]/EE_X_axis_proj[2]],'r')
+    ax.plot([EE_proj[0]/EE_proj[2],EE_Z_axis_proj[0]/EE_Z_axis_proj[2]],[EE_proj[1]/EE_proj[2],EE_Z_axis_proj[1]/EE_Z_axis_proj[2]],'b')
+
 def plot_on_image(idx):
-    img_name = '/' + Img[idx] + '.jpg'
-    img = cv2.cvtColor(cv2.imread(img_dir + img_name), cv2.COLOR_BGR2RGB)
-    fig, ax = plt.subplots()
+    img = cv2.cvtColor(cv2.imread(img_dir + '/' + Img[idx] + '.jpg'), cv2.COLOR_BGR2RGB)
+    _, ax = plt.subplots()
     ax.imshow(img,alpha=0.5)
     # Base and marker positions
     base_XYZ = np.array([X[idx],0.0,Z[idx],1.0])
@@ -85,7 +103,7 @@ def plot_on_image(idx):
     XZ = get_FK([theta_extracted[idx,0],theta_extracted[idx,1],X[idx],Z[idx],Phi[idx]],21)
     curve_XYZ = np.vstack([XZ[:,0],np.zeros((XZ.shape[0],)),XZ[:,1],np.ones((XZ.shape[0],))])
     FK_evals = P@curve_XYZ
-    ax.plot(FK_evals[0]/FK_evals[2],FK_evals[1]/FK_evals[2],c='tab:orange' if IK_converged[idx,0] else 'tab:red')
+    ax.plot(FK_evals[0]/FK_evals[2],FK_evals[1]/FK_evals[2],c='tab:orange' if IK_converged[idx] else 'orange')
     ax.scatter(FK_evals[0,10]/FK_evals[2,10],FK_evals[1,10]/FK_evals[2,10],s=2,c='m',zorder=2.5)
     ax.scatter(FK_evals[0,-1]/FK_evals[2,-1],FK_evals[1,-1]/FK_evals[2,-1],s=2,c='m',zorder=2.5)
     plt.show()
@@ -155,13 +173,31 @@ def eval_J_endpt(theta, p_vals): return np.array(f_J_end(theta, p_vals).apply(mp
 
 #%%
 # Data paths
-dataset_name = 'rot_link6_15FPS'
+dataset_name = 'sine_x_30FPS'
 data_date = '0508_tripod'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name  # TODO different in image_processing (extra '/' on end), maybe make same?
 
 print('Dataset: ' + dataset_name)
 print('Date: ' + data_date)
 print('Path: ' + data_dir)
+
+#%%
+# Camera intrinsic and extrinsic transforms - copied from image_processing - TODO - make better (in both)
+# K matrix from saved camera info
+# HACK - extracting values manually from calibration files... mega hacky but... it'll do? Until anything at all changes and breaks it
+# Probably save it as a nicer numpy format when doing bagfile extraction
+K_line = np.loadtxt(data_dir + '/color_camera_info.txt', dtype='str', delimiter=',', skiprows=10, max_rows=1)
+K_cam = np.array([[float(K_line[0][4:]), 0.0, float(K_line[2])], 
+                  [0.0, float(K_line[4]), float(K_line[5])], 
+                  [0.0, 0.0, 1.0]])
+
+R_line = np.loadtxt(data_dir + '/../calib_' + data_date + '.launch', dtype='str', delimiter=' ', skiprows=5, max_rows=1)
+R_cam = R.from_quat([float(R_line[11]), float(R_line[12]), float(R_line[13]), float(R_line[14])]).as_matrix() # cam to base frame
+T_cam = np.array([[float(R_line[6][6:])],[float(R_line[7])],[float(R_line[8])]])
+                 
+E_base = np.hstack([R_cam, T_cam]) # cam to base frame
+E_cam = np.hstack([R_cam.T, -R_cam.T@T_cam]) # base to cam frame
+P = K_cam@E_cam
 
 #%%
 # Import data
@@ -174,39 +210,53 @@ ts_W = np.loadtxt(data_dir + '/EE_wrench.csv', dtype=np.ulonglong, delimiter=','
 ts_begin = np.max([np.min(ts_OTEE), np.min(ts_markers), np.min(ts_W)])
 ts_end = np.min([np.max(ts_OTEE), np.max(ts_markers), np.max(ts_W)])
 t_OTEE = ts_OTEE/1e9-ts_begin/1e9
-t_markers = ts_markers/1e9-ts_begin/1e9 -0.09765657 # HACK - manual offset for measured camera delay
+t_markers = ts_markers/1e9-ts_begin/1e9 -0.047 # HACK - manual offset for measured camera delay
 t_W = ts_W/1e9-ts_begin/1e9
 t_end = ts_end/1e9-ts_begin/1e9
 # Measurements
 O_T_EE = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1, usecols=range(1,17))
-markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows=1, usecols=range(1,5))
+markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows=1, usecols=range(1,7))
 W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=range(1,7))
 
 # Physical definitions for object set up
-p_vals = [1.0, 1.0, 0.75, 0.015]
-base_offset = 0.0 # Z-dir offset of cable attachment point from measured robot EE frame
+p_vals = [1.0, 1.0, 0.742, 0.015]
+base_offset = 0.0085 # Z-dir offset of cable attachment point from measured robot EE frame
 
 # Copy relevant planar data
 RPY_meas = R.from_matrix(np.array([[O_T_EE[:,0], O_T_EE[:,1],O_T_EE[:,2]],
                                    [O_T_EE[:,4], O_T_EE[:,5],O_T_EE[:,6]],
                                    [O_T_EE[:,8], O_T_EE[:,9],O_T_EE[:,10]]]).T).as_euler('xyz', degrees=False)
 Phi_meas = RPY_meas[:,1]
-X_meas = O_T_EE[:,12] + base_offset*np.cos(Phi_meas) # Move robot EE position to cable attachment point
-Z_meas = O_T_EE[:,14] + base_offset*np.sin(Phi_meas)
-X_mid_meas = markers[:,0]
-Z_mid_meas = markers[:,1]
-X_end_meas = markers[:,2]
-Z_end_meas = markers[:,3]
+X_meas = O_T_EE[:,12] + base_offset*np.sin(Phi_meas) # Move robot EE position to cable attachment point
+Z_meas = O_T_EE[:,14] - base_offset*np.cos(Phi_meas)
+X_base_meas = markers[:,0]
+Z_base_meas = markers[:,1]
+X_mid_meas = markers[:,2]
+Z_mid_meas = markers[:,3]
+X_end_meas = markers[:,4]
+Z_end_meas = markers[:,5]
 Fx_meas = W[:,0] # TODO - adjust F/T meas due to offset from FT frame?
 Fz_meas = W[:,2]
 Ty_meas = W[:,4]
 
+# Check camera calibration
+plot_calib_check()
+
+#%%
+# !!! The fudge zone !!!
+X_meas = X_meas - 0.008
+plot_calib_check()
+# !!! Leaving the fudge zone !!!
+
+#%%
 # Interpolate to uniform sample times # TODO - double check, is there any desynching of times happeneing here?
 freq_target = 30
 t_target = np.arange(0, t_end, 1/freq_target)
 X = np.interp(t_target, t_OTEE, X_meas)
 Z = np.interp(t_target, t_OTEE, Z_meas)
 Phi = np.interp(t_target, t_OTEE, Phi_meas)
+X_base = np.interp(t_target, t_markers, X_base_meas)
+Z_base = np.interp(t_target, t_markers, Z_base_meas)
 X_mid = np.interp(t_target, t_markers, X_mid_meas)
 Z_mid = np.interp(t_target, t_markers, Z_mid_meas)
 X_end = np.interp(t_target, t_markers, X_end_meas)
@@ -266,7 +316,7 @@ draw_FT = False
 in_robot_frame = True
 post = '_robot' if in_robot_frame else ''
 
-with writer.saving(fig, data_dir + '/curvature_anim_delay98' + post + '.mp4', 200):
+with writer.saving(fig, data_dir + '/curvature_anim' + post + '.mp4', 200):
     for i in range(fk_targets.shape[0]):
         if i % freq_target == 0:
             print('Generating animation, ' + str(i/freq_target) + ' of ' + str(t_end) + 's')
@@ -314,24 +364,6 @@ with writer.saving(fig, data_dir + '/curvature_anim_delay98' + post + '.mp4', 20
 matplotlib.use('module://matplotlib_inline.backend_inline') # TODO -figure out how to actually switch back to inline plotting
 
 #%%
-# Camera intrinsic and extrinsic transforms - copied from image_processing - TODO - make better (in both)
-# K matrix from saved camera info
-# HACK - extracting values manually from calibration files... mega hacky but... it'll do? Until anything at all changes and breaks it
-# Probably save it as a nicer numpy format when doing bagfile extraction
-K_line = np.loadtxt(data_dir + '/color_camera_info.txt', dtype='str', delimiter=',', skiprows=10, max_rows=1)
-K_cam = np.array([[float(K_line[0][4:]), 0.0, float(K_line[2])], 
-                  [0.0, float(K_line[4]), float(K_line[5])], 
-                  [0.0, 0.0, 1.0]])
-
-R_line = np.loadtxt(data_dir + '/../calib_' + data_date + '.launch', dtype='str', delimiter=' ', skiprows=5, max_rows=1)
-R_cam = R.from_quat([float(R_line[11]), float(R_line[12]), float(R_line[13]), float(R_line[14])]).as_matrix() # cam to base frame
-T_cam = np.array([[float(R_line[6][6:])],[float(R_line[7])],[float(R_line[8])]])
-                 
-E_base = np.hstack([R_cam, T_cam]) # cam to base frame
-E_cam = np.hstack([R_cam.T, -R_cam.T@T_cam]) # base to cam frame
-P = K_cam@E_cam
-
-#%%
 # Animation over camera image
 import matplotlib
 matplotlib.use("Agg")
@@ -345,7 +377,7 @@ mid = plt.scatter([], [], s=2, c='tab:green',zorder=2.5)
 end = plt.scatter([], [], s=2, c='tab:blue',zorder=2.5)
 curve, = plt.plot([], [])
 
-with writer.saving(fig, data_dir + '/overlay_anim_delay98.mp4', 200):
+with writer.saving(fig, data_dir + '/overlay_anim_off_delay47.mp4', 200):
     for idx in range(fk_targets.shape[0]):
         if idx % freq_target == 0:
             print('Generating animation, ' + str(idx/freq_target) + ' of ' + str(t_end) + 's')
