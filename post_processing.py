@@ -106,20 +106,28 @@ def get_FK(q_repl,num_pts=21):
        FK_evals[i_s] = np.array(eval_fk(q_repl,p_vals,s_evals[i_s],0.0))
     return FK_evals.squeeze()
 
-def find_curvature(theta_guess, fk_target, epsilon=0.01, max_iterations=25):  
-    theta_est = None
+def find_curvature(theta_guess, fk_target, epsilon=0.015, max_iterations=10):  
+    error_2norm_last = np.inf
     for i in range(max_iterations):
-        error = np.vstack([eval_midpt(theta_guess,p_vals), eval_endpt(theta_guess,p_vals)]) - fk_target.reshape(4,1)
-        if np.linalg.norm(error) < epsilon:
-            theta_est = theta_guess
-            break
+        error = (np.vstack([eval_midpt(theta_guess,p_vals), eval_endpt(theta_guess,p_vals)]) - fk_target.reshape(4,1))
+        error_2norm = np.linalg.norm(error)
+        if error_2norm < epsilon:
+            print("Converged after " + str(i) + " iterations")
+            return theta_guess, True
         else:
-            J = np.vstack([eval_J_midpt(theta_guess, p_vals), eval_J_endpt(theta_guess, p_vals)])
-            theta_guess = theta_guess - (np.linalg.pinv(J)@error).squeeze() # TODO - add step size?
-    if theta_est is None:
-        print('Failed to converge')
-        theta_est = np.array([np.nan, np.nan])
-    return theta_est
+            if np.isclose(error_2norm, error_2norm_last):
+                print("Error stable after iteration " + str(i))
+                return theta_guess, False
+            elif error_2norm > error_2norm_last:
+                print("Error increasing after iteration " + str(i))
+                return theta_guess, False
+            else:
+                J = np.vstack([eval_J_midpt(theta_guess, p_vals), eval_J_endpt(theta_guess, p_vals)])
+                theta_guess = theta_guess - (np.linalg.pinv(J)@error).squeeze()
+                error_2norm_last = error_2norm
+    print("Max iterations reached (check why)")
+    return theta_guess, False
+
 
 #%%
 # Import forward kinematics
@@ -147,8 +155,8 @@ def eval_J_endpt(theta, p_vals): return np.array(f_J_end(theta, p_vals).apply(mp
 
 #%%
 # Data paths
-dataset_name = 'rot_link6_30FPS'
-data_date = '0508_desk'
+dataset_name = 'rot_link6_15FPS'
+data_date = '0508_tripod'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name  # TODO different in image_processing (extra '/' on end), maybe make same?
 
 print('Dataset: ' + dataset_name)
@@ -166,7 +174,7 @@ ts_W = np.loadtxt(data_dir + '/EE_wrench.csv', dtype=np.ulonglong, delimiter=','
 ts_begin = np.max([np.min(ts_OTEE), np.min(ts_markers), np.min(ts_W)])
 ts_end = np.min([np.max(ts_OTEE), np.max(ts_markers), np.max(ts_W)])
 t_OTEE = ts_OTEE/1e9-ts_begin/1e9
-t_markers = ts_markers/1e9-ts_begin/1e9 -0.072903058 # HACK - manual offset for measured camera delay
+t_markers = ts_markers/1e9-ts_begin/1e9 -0.09765657 # HACK - manual offset for measured camera delay
 t_W = ts_W/1e9-ts_begin/1e9
 t_end = ts_end/1e9-ts_begin/1e9
 # Measurements
@@ -175,7 +183,7 @@ markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows
 W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=range(1,7))
 
 # Physical definitions for object set up
-p_vals = [1.0, 1.0, 0.745, 0.015]
+p_vals = [1.0, 1.0, 0.75, 0.015]
 base_offset = 0.0 # Z-dir offset of cable attachment point from measured robot EE frame
 
 # Copy relevant planar data
@@ -214,9 +222,6 @@ Ty = signal.decimate(Ty_90Hz, 3)
 # Match images to target timesteps
 idxs = [(np.abs(t_markers - t_t)).argmin() for t_t in t_target] # find closest timestamp to each target timestep
 Img = np.array([ts_markers[i] for i in idxs], dtype=str)
-# # TODO - actually looks better with timestamps just shifted by approximate delay
-# # But marker data way off. Need to figure out how to properly sync
-# Img = np.array([ts_markers[i+2] for i in np.arange(len(ts_markers)-1)], dtype=str)
 
 #%%
 # Transform marker points to fixed PAC frame (subtract X/Z, rotate back phi)
@@ -226,19 +231,15 @@ fk_targets = np.hstack([rot_XZ_on_Y(fk_targets_mid,-Phi), rot_XZ_on_Y(fk_targets
 
 theta_extracted = np.zeros((fk_targets.shape[0],2,))
 theta_guess = np.array([1e-3, 1e-3])
-IK_converged = np.zeros((fk_targets.shape[0],2,))
+IK_converged = np.zeros((fk_targets.shape[0],1,))
 
 #%%
 # Extract curvature from marker points
 for n in range(fk_targets.shape[0]):
-    theta_n = find_curvature(theta_guess, fk_targets[n,:])
+    theta_n, convergence = find_curvature(theta_guess, fk_targets[n,:])
     theta_extracted[n,:] = theta_n
-    if np.isnan(theta_n).any():
-        print('Failed to converge for sample ' + str(n))
-        theta_extracted[n,:] = theta_guess
-    else:
-        theta_guess = theta_n
-        IK_converged[n,:] = 1
+    theta_guess = theta_n
+    IK_converged[n] = convergence
 
 #%%
 # Curvature extraction animation
@@ -265,7 +266,7 @@ draw_FT = False
 in_robot_frame = True
 post = '_robot' if in_robot_frame else ''
 
-with writer.saving(fig, data_dir + '/curvature_anim_changed_back' + post + '.mp4', 200):
+with writer.saving(fig, data_dir + '/curvature_anim_delay98' + post + '.mp4', 200):
     for i in range(fk_targets.shape[0]):
         if i % freq_target == 0:
             print('Generating animation, ' + str(i/freq_target) + ' of ' + str(t_end) + 's')
@@ -278,7 +279,7 @@ with writer.saving(fig, data_dir + '/curvature_anim_changed_back' + post + '.mp4
             XZ = get_FK([theta_extracted[i,0],theta_extracted[i,1],X[i],Z[i],Phi[i]],21)
         else:
             XZ = get_FK([theta_extracted[i,0],theta_extracted[i,1],0,0,0],21)
-        curve.set_color('tab:orange' if IK_converged[i,0] else 'tab:red')
+        curve.set_color('tab:orange' if IK_converged[i,0] else 'orange')
         curve.set_data(XZ[:,0], XZ[:,1])
         # Draw marker positions
         if in_robot_frame:
@@ -307,7 +308,7 @@ with writer.saving(fig, data_dir + '/curvature_anim_changed_back' + post + '.mp4
             plt.ylim(XZ[0,1]-(p_vals[2]+0.1), XZ[0,1]+0.1)
 
         writer.grab_frame()
-
+    print("Finished")
     plt.close(fig)
 
 matplotlib.use('module://matplotlib_inline.backend_inline') # TODO -figure out how to actually switch back to inline plotting
@@ -344,7 +345,7 @@ mid = plt.scatter([], [], s=2, c='tab:green',zorder=2.5)
 end = plt.scatter([], [], s=2, c='tab:blue',zorder=2.5)
 curve, = plt.plot([], [])
 
-with writer.saving(fig, data_dir + '/overlay_anim_manual_shift.mp4', 200):
+with writer.saving(fig, data_dir + '/overlay_anim_delay98.mp4', 200):
     for idx in range(fk_targets.shape[0]):
         if idx % freq_target == 0:
             print('Generating animation, ' + str(idx/freq_target) + ' of ' + str(t_end) + 's')
@@ -366,11 +367,11 @@ with writer.saving(fig, data_dir + '/overlay_anim_manual_shift.mp4', 200):
         XZ = get_FK([theta_extracted[idx,0],theta_extracted[idx,1],X[idx],Z[idx],Phi[idx]],21)
         curve_XYZ = np.vstack([XZ[:,0],np.zeros((XZ.shape[0],)),XZ[:,1],np.ones((XZ.shape[0],))])
         FK_evals = P@curve_XYZ
-        curve.set_color('tab:orange' if IK_converged[idx,0] else 'tab:red')
+        curve.set_color('tab:orange' if IK_converged[idx,0] else 'orange')
         curve.set_data(FK_evals[0]/FK_evals[2],FK_evals[1]/FK_evals[2])
 
         writer.grab_frame()
-
+    print("Finished")
     plt.close(fig)
 
 matplotlib.use('module://matplotlib_inline.backend_inline')
