@@ -39,16 +39,18 @@ def plot_markers(idx, plot_mask=True, save=False):
     ax.grid()
     ax.set_xlim(0,img.shape[1])
     ax.set_ylim(0,img.shape[0])
-    marker_colors = ['palegreen','lightskyblue']
+    marker_colors = ['lightcoral','palegreen','lightskyblue']
 
     if plot_mask:
-        marker_colors = ['forestgreen','dodgerblue']
+        marker_colors = ['orangered','forestgreen','dodgerblue']
+        ax.plot(base_mask_pixels[idx][1],base_mask_pixels[idx][0],',',c='lightcoral')
         ax.plot(mid_mask_pixels[idx][1],mid_mask_pixels[idx][0],',',c='palegreen')
         ax.plot(end_mask_pixels[idx][1],end_mask_pixels[idx][0],',',c='lightskyblue')
 
     ax.imshow(np.asarray(img)) # TODO - way to make this not display when saving?
-    ax.plot(mid_positions_px[idx,1],mid_positions_px[idx,0],ms=2,fillstyle='none',marker='o',mec=marker_colors[0])
-    ax.plot(end_positions_px[idx,1],end_positions_px[idx,0],ms=2,fillstyle='none',marker='o',mec=marker_colors[1])
+    ax.plot(base_positions_px[idx,1],base_positions_px[idx,0],ms=2,fillstyle='none',marker='o',mec=marker_colors[0])
+    ax.plot(mid_positions_px[idx,1],mid_positions_px[idx,0],ms=2,fillstyle='none',marker='o',mec=marker_colors[1])
+    ax.plot(end_positions_px[idx,1],end_positions_px[idx,0],ms=2,fillstyle='none',marker='o',mec=marker_colors[2])
     # ax.plot(110,460,'y,') # For checking difference between projection and image
     
     if save:
@@ -90,7 +92,7 @@ print('Path: ' + data_dir)
 
 #%%
 # Manual paths for interactive mode
-dataset_name = 'sine_x_15FPS'
+dataset_name = 'rot_link6_15FPS'
 data_date = '0508_tripod'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name + '/'
 
@@ -125,10 +127,13 @@ P = K_cam@E_cam
 #%%
 # Process each image in folder
 
+base_positions_px = []
 mid_positions_px = []
 end_positions_px = []
+base_positions_XZplane = []
 mid_positions_XZplane = []
 end_positions_XZplane = []
+base_mask_pixels = []
 mid_mask_pixels = []
 end_mask_pixels = []
 marker_ts = []
@@ -139,9 +144,9 @@ marker_ts = []
 # dimg_list = os.listdir(data_dir + 'depth/')
 # didx = 0
 
-# Mask range for green and blue markers
-# lower_R = np.array([0,80,20])
-# upper_R = np.array([10,255,255])
+# Mask range for markers
+lower_R = np.array([0,80,50])
+upper_R = np.array([10,255,255])
 lower_G = np.array([20,80,20])
 upper_G = np.array([80,255,255])
 lower_B = np.array([90,100,20])
@@ -151,35 +156,45 @@ for img_name in imgs:
     img = cv2.imread(img_dir + img_name)
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
+    mask_R = cv2.inRange(hsv, lower_R, upper_R)
     mask_G = cv2.inRange(hsv, lower_G, upper_G)
     mask_B = cv2.inRange(hsv, lower_B, upper_B)
 
     # Crop above base (change depending on img orientation)
+    mask_R[:,:100] = 0
     mask_G[:,:500] = 0
     mask_B[:,:800] = 0
     # Crop trouble areas creating some spurious readings - TODO proper solution, outlier resistant
+    mask_R[:,200:] = 0
     mask_G[:,800:] = 0
     # mask_B[:25,:] = 0
 
     # Remove noise from mask
+    mask_R = cv2.morphologyEx(mask_R, cv2.MORPH_OPEN, np.ones((5,5)))
+    mask_R = cv2.morphologyEx(mask_R, cv2.MORPH_CLOSE, np.ones((5,5)))
     mask_G = cv2.morphologyEx(mask_G, cv2.MORPH_OPEN, np.ones((5,5)))
     mask_G = cv2.morphologyEx(mask_G, cv2.MORPH_CLOSE, np.ones((5,5)))
     mask_B = cv2.morphologyEx(mask_B, cv2.MORPH_OPEN, np.ones((5,5)))
     mask_B = cv2.morphologyEx(mask_B, cv2.MORPH_CLOSE, np.ones((5,5)))
     # Remove noise from mask TODO - is this here twice on purpose?
+    mask_R = cv2.morphologyEx(mask_R, cv2.MORPH_OPEN, np.ones((5,5)))
+    mask_R = cv2.morphologyEx(mask_R, cv2.MORPH_CLOSE, np.ones((5,5)))
     mask_G = cv2.morphologyEx(mask_G, cv2.MORPH_OPEN, np.ones((5,5)))
     mask_G = cv2.morphologyEx(mask_G, cv2.MORPH_CLOSE, np.ones((5,5)))
     mask_B = cv2.morphologyEx(mask_B, cv2.MORPH_OPEN, np.ones((5,5)))
     mask_B = cv2.morphologyEx(mask_B, cv2.MORPH_CLOSE, np.ones((5,5)))
 
     # Mask non-marker pixels
+    masked_R = cv2.bitwise_and(img,img,mask=mask_R)
     masked_G = cv2.bitwise_and(img,img,mask=mask_G)
     masked_B = cv2.bitwise_and(img,img,mask=mask_B)
 
     # Locate markers at COM of mask
+    base_pos_px = np.round(center_of_mass(mask_R)).astype(int)
     mid_pos_px = np.round(center_of_mass(mask_G)).astype(int)
     end_pos_px = np.round(center_of_mass(mask_B)).astype(int)
-    # Convert px location to world frame, assuming on Y=0 plane
+    # Convert px location to world frame, assuming on Y=0 plane TODO - account for cable thickness? More important for base marker.
+    base_pos_XZplane = UV_to_XZplane(base_pos_px[1],base_pos_px[0])
     mid_pos_XZplane = UV_to_XZplane(mid_pos_px[1],mid_pos_px[0])
     end_pos_XZplane = UV_to_XZplane(end_pos_px[1],end_pos_px[0])
 
@@ -191,16 +206,21 @@ for img_name in imgs:
     # end_positions_XYZ.append(end_pos_XYZ)
     # didx += 1
 
+    base_positions_px.append(base_pos_px)
     mid_positions_px.append(mid_pos_px)
     end_positions_px.append(end_pos_px)
+    base_positions_XZplane.append(base_pos_XZplane)
     mid_positions_XZplane.append(mid_pos_XZplane)
     end_positions_XZplane.append(end_pos_XZplane)
+    base_mask_pixels.append(np.where(masked_R[:,:,0] > 0))
     mid_mask_pixels.append(np.where(masked_G[:,:,0] > 0))
     end_mask_pixels.append(np.where(masked_B[:,:,0] > 0))
     marker_ts.append(img_name[:-4])
 
+base_positions_px = np.array(base_positions_px)
 mid_positions_px = np.array(mid_positions_px)
 end_positions_px = np.array(end_positions_px)
+base_positions_XZplane = np.array(base_positions_XZplane)
 mid_positions_XZplane = np.array(mid_positions_XZplane)
 end_positions_XZplane = np.array(end_positions_XZplane)
 t_markers = np.array(marker_ts, dtype=np.ulonglong)
@@ -211,16 +231,21 @@ t_markers = (t_markers - t_markers[0])/1e9
 # end_positions_XYZ = np.array(end_positions_XYZ)
 
 # Check for false detections
+plt.plot(base_positions_px[:,0])
 plt.plot(mid_positions_px[:,0])
+plt.plot(end_positions_px[:,0])
+plt.plot(base_positions_px[:,1])
+plt.plot(mid_positions_px[:,1])
 plt.plot(end_positions_px[:,1])
 
 #%%
 # Export to csv
 with open(data_dir + 'marker_positions.csv', 'w', newline='') as csvfile:
     writer = csv.writer(csvfile, delimiter=',')
-    writer.writerow(['ts', 'mid_pos_x', 'mid_pos_z', 'end_pos_x', 'end_pos_z'])
+    writer.writerow(['ts', 'base_pos_x', 'base_pos_z', 'mid_pos_x', 'mid_pos_z', 'end_pos_x', 'end_pos_z'])
     for n in range(len(marker_ts)):
         writer.writerow([marker_ts[n], 
+                         float(base_positions_XZplane[n,0]), float(base_positions_XZplane[n,2]),
                          float(mid_positions_XZplane[n,0]), float(mid_positions_XZplane[n,2]), 
                          float(end_positions_XZplane[n,0]), float(end_positions_XZplane[n,2])])
 
