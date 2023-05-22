@@ -177,7 +177,7 @@ def eval_J_endpt(theta, p_vals): return np.array(f_J_end(theta, p_vals).apply(mp
 
 #%%
 # Data paths
-dataset_name = 'sine_x_30FPS'
+dataset_name = 'rot_link6_30FPS'
 data_date = '0508_tripod'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name  # TODO different in image_processing (extra '/' on end), maybe make same?
 
@@ -263,9 +263,9 @@ fig.suptitle('X, Z, Phi, Fx, Fz, Ty')
 
 #%%
 # Change these referring to plot, or skip to use full set of available data
-ts_begin = 5.7e10 + 1.6835609e18 
-ts_end = 7.0e10 + 1.6835609e18
-cam_delay = 0.03 # Difference between timestamps of first movement visible in camera and robot state data
+ts_begin = 0.6e10 + 1.6835618e18 
+ts_end = 2.0e10 + 1.6835618e18
+cam_delay = 0.06 # Difference between timestamps of first movement visible in camera and robot state data
 
 #%%
 # Convert absolute ROS timestamps to relative seconds
@@ -317,6 +317,31 @@ for n in range(fk_targets.shape[0]):
     theta_extracted[n,:] = theta_n
     theta_guess = theta_n
     IK_converged[n] = convergence
+Theta0 = theta_extracted[:,0]
+Theta1 = theta_extracted[:,1]
+
+#%%
+# Derivatives
+SG_window = 30
+SG_order = 10
+dX = signal.savgol_filter(X,SG_window,SG_order,deriv=1,delta=1/freq_target,mode='nearest')
+ddX = signal.savgol_filter(X,SG_window,SG_order,deriv=2,delta=1/freq_target,mode='nearest')
+dZ = signal.savgol_filter(Z,SG_window,SG_order,deriv=1,delta=1/freq_target,mode='nearest')
+ddZ = signal.savgol_filter(Z,SG_window,SG_order,deriv=2,delta=1/freq_target,mode='nearest')
+dPhi = signal.savgol_filter(Phi,SG_window,SG_order,deriv=1,delta=1/freq_target,mode='nearest')
+ddPhi = signal.savgol_filter(Phi,SG_window,SG_order,deriv=2,delta=1/freq_target,mode='nearest')
+dTheta0 = signal.savgol_filter(Theta0,SG_window,SG_order,deriv=1,delta=1/freq_target,mode='nearest')
+ddTheta0 = signal.savgol_filter(Theta0,SG_window,SG_order,deriv=2,delta=1/freq_target,mode='nearest')
+dTheta1 = signal.savgol_filter(Theta1,SG_window,SG_order,deriv=1,delta=1/freq_target,mode='nearest')
+ddTheta1 = signal.savgol_filter(Theta1,SG_window,SG_order,deriv=2,delta=1/freq_target,mode='nearest')
+
+#%%
+# Save data
+np.savez(data_dir + '/processed', t=t_target, 
+         X=X, Z=Z, Phi=Phi, Theta0=Theta0, Theta1=Theta1, 
+         dX=dX,  dZ=dZ, dPhi=dPhi, dTheta0=dTheta0, dTheta1=dTheta1,
+         ddX=ddX, ddZ=ddZ, ddPhi=ddPhi, ddTheta0=ddTheta0, ddTheta1=ddTheta1,
+         Fx=Fx, Fz=Fz, Ty=Ty)
 
 #%%
 # Curvature extraction animation
@@ -343,7 +368,7 @@ draw_FT = False
 in_robot_frame = True
 post = '_robot' if in_robot_frame else ''
 
-with writer.saving(fig, data_dir + '/curvature_anim' + post + '.mp4', 200):
+with writer.saving(fig, data_dir + '/videos/curvature_anim' + post + '.mp4', 200):
     for i in range(fk_targets.shape[0]):
         if i % freq_target == 0:
             print('Generating animation, ' + str(i/freq_target) + ' of ' + str(t_end) + 's')
@@ -385,6 +410,7 @@ with writer.saving(fig, data_dir + '/curvature_anim' + post + '.mp4', 200):
             plt.ylim(XZ[0,1]-(p_vals[2]+0.1), XZ[0,1]+0.1)
 
         writer.grab_frame()
+
     print("Finished")
     plt.close(fig)
 
@@ -404,7 +430,9 @@ mid = plt.scatter([], [], s=2, c='tab:green',zorder=2.5)
 end = plt.scatter([], [], s=2, c='tab:blue',zorder=2.5)
 curve, = plt.plot([], [])
 
-with writer.saving(fig, data_dir + '/overlay_anim_off_delay47_trim.mp4', 200):
+delay = ('_delay' + str(int(cam_delay*1e3))) if cam_delay > 0.0 else ''
+
+with writer.saving(fig, data_dir + '/videos/overlay_anim' + delay + '.mp4', 200):
     for idx in range(fk_targets.shape[0]):
         if idx % freq_target == 0:
             print('Generating animation, ' + str(idx/freq_target) + ' of ' + str(t_end) + 's')
@@ -430,26 +458,11 @@ with writer.saving(fig, data_dir + '/overlay_anim_off_delay47_trim.mp4', 200):
         curve.set_data(FK_evals[0]/FK_evals[2],FK_evals[1]/FK_evals[2])
 
         writer.grab_frame()
+
     print("Finished")
     plt.close(fig)
 
 matplotlib.use('module://matplotlib_inline.backend_inline')
-
-#%%
-# # Finite difference derivatives 
-# dX = np.diff(X)/(1/freq_target)
-# ddX = np.diff(dX)/(1/freq_target)
-# dZ = np.diff(Z)/(1/freq_target)
-# ddZ = np.diff(dZ)/(1/freq_target)
-# dPhi = np.diff(Phi)/(1/freq_target)
-# ddPhi = np.diff(dPhi)/(1/freq_target)
-
-#%%
-# # Save data
-# np.savez(data_dir + '/processed', t=t_target, 
-#          X=X, Z=Z, Phi=Phi, Fx=Fx, Fz=Fz, Ty=Ty, 
-#          dX=dX, ddX=ddX, dZ=dZ, 
-#          ddZ=ddZ, dPhi=dPhi, ddPhi=ddPhi)
 
 #%%
 # # Filtering test
