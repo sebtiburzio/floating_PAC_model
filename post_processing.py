@@ -68,7 +68,7 @@ def plot_FK(q_repl):
 
 def plot_calib_check():
     img = cv2.cvtColor(cv2.imread(img_dir + '/' + str(ts_markers[0]) + '.jpg'), cv2.COLOR_BGR2RGB)
-    _, ax = plt.subplots()
+    fig, ax = plt.subplots()
     ax.imshow(img,alpha=0.5)
     # End effector measured by robot
     EE_XYZ = np.array([O_T_EE[0,12],0.0,O_T_EE[0,14],1.0])
@@ -84,6 +84,10 @@ def plot_calib_check():
     # Planar axes
     ax.plot([EE_proj[0]/EE_proj[2],EE_X_axis_proj[0]/EE_X_axis_proj[2]],[EE_proj[1]/EE_proj[2],EE_X_axis_proj[1]/EE_X_axis_proj[2]],'r')
     ax.plot([EE_proj[0]/EE_proj[2],EE_Z_axis_proj[0]/EE_Z_axis_proj[2]],[EE_proj[1]/EE_proj[2],EE_Z_axis_proj[1]/EE_Z_axis_proj[2]],'b')
+    ax.legend(['Cable base (X/Z_meas after offsets)','FT X axis', 'FT Z axis'])
+    fig.suptitle('Robot data projected to camera image frame')
+    fig.tight_layout()
+    fig.subplots_adjust(top=1.15)
 
 def plot_on_image(idx):
     img = cv2.cvtColor(cv2.imread(img_dir + '/' + Img[idx] + '.jpg'), cv2.COLOR_BGR2RGB)
@@ -124,7 +128,7 @@ def get_FK(q_repl,num_pts=21):
        FK_evals[i_s] = np.array(eval_fk(q_repl,p_vals,s_evals[i_s],0.0))
     return FK_evals.squeeze()
 
-def find_curvature(theta_guess, fk_target, epsilon=0.015, max_iterations=10):  
+def find_curvature(theta_guess, fk_target, epsilon=0.01, max_iterations=10):  
     error_2norm_last = np.inf
     for i in range(max_iterations):
         error = (np.vstack([eval_midpt(theta_guess,p_vals), eval_endpt(theta_guess,p_vals)]) - fk_target.reshape(4,1))
@@ -206,20 +210,15 @@ img_dir = data_dir + '/images'
 ts_OTEE = np.loadtxt(data_dir + '/EE_pose.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
 ts_markers = np.loadtxt(data_dir + '/marker_positions.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
 ts_W = np.loadtxt(data_dir + '/EE_wrench.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
-# Rescale timestamps to seconds since first msg
 ts_begin = np.max([np.min(ts_OTEE), np.min(ts_markers), np.min(ts_W)])
 ts_end = np.min([np.max(ts_OTEE), np.max(ts_markers), np.max(ts_W)])
-t_OTEE = ts_OTEE/1e9-ts_begin/1e9
-t_markers = ts_markers/1e9-ts_begin/1e9 -0.047 # HACK - manual offset for measured camera delay
-t_W = ts_W/1e9-ts_begin/1e9
-t_end = ts_end/1e9-ts_begin/1e9
 # Measurements
 O_T_EE = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1, usecols=range(1,17))
 markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows=1, usecols=range(1,7))
 W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=range(1,7))
 
 # Physical definitions for object set up
-p_vals = [1.0, 1.0, 0.742, 0.015]
+p_vals = [1.0, 1.0, 0.742, 0.015] # cable properties: mass (length), mass (end), length, radius
 base_offset = 0.0085 # Z-dir offset of cable attachment point from measured robot EE frame
 
 # Copy relevant planar data
@@ -239,17 +238,45 @@ Fx_meas = W[:,0] # TODO - adjust F/T meas due to offset from FT frame?
 Fz_meas = W[:,2]
 Ty_meas = W[:,4]
 
+#%% 
+#------------------------------- Manual checks and changes - start -------------------------------#
 # Check camera calibration
 plot_calib_check()
 
 #%%
 # !!! The fudge zone !!!
+# Static offsets to correct for camera calibration error
 X_meas = X_meas - 0.008
 plot_calib_check()
 # !!! Leaving the fudge zone !!!
 
 #%%
-# Interpolate to uniform sample times # TODO - double check, is there any desynching of times happeneing here?
+# Trim dead time from beginning and end of data
+fig, axs = plt.subplots(5,1)
+axs[0].plot(ts_markers, X_end_meas)
+axs[1].plot(ts_markers, Z_end_meas)
+axs[2].plot(ts_W, Fx_meas)
+axs[3].plot(ts_W, Fz_meas)
+axs[4].plot(ts_W, Ty_meas)
+axs[-1].minorticks_on()
+fig.suptitle('X, Z, Phi, Fx, Fz, Ty')
+
+#%%
+# Change these referring to plot, or skip to use full set of available data
+ts_begin = 5.7e10 + 1.6835609e18 
+ts_end = 7.0e10 + 1.6835609e18
+cam_delay = 0.03 # Difference between timestamps of first movement visible in camera and robot state data
+
+#%%
+# Convert absolute ROS timestamps to relative seconds
+t_OTEE = ts_OTEE/1e9-ts_begin/1e9
+t_markers = ts_markers/1e9-ts_begin/1e9 -cam_delay # HACK - manual offset for measured camera delay
+t_W = ts_W/1e9-ts_begin/1e9
+t_end = ts_end/1e9-ts_begin/1e9
+#-------------------------------- Manual checks and changes - end --------------------------------#
+
+#%%
+# Interpolate to uniform sample times
 freq_target = 30
 t_target = np.arange(0, t_end, 1/freq_target)
 X = np.interp(t_target, t_OTEE, X_meas)
@@ -274,6 +301,7 @@ idxs = [(np.abs(t_markers - t_t)).argmin() for t_t in t_target] # find closest t
 Img = np.array([ts_markers[i] for i in idxs], dtype=str)
 
 #%%
+# Extract curvature from marker points
 # Transform marker points to fixed PAC frame (subtract X/Z, rotate back phi)
 fk_targets_mid = np.vstack([X_mid-X,Z_mid-Z]).T
 fk_targets_end = np.vstack([X_end-X,Z_end-Z]).T
@@ -283,8 +311,7 @@ theta_extracted = np.zeros((fk_targets.shape[0],2,))
 theta_guess = np.array([1e-3, 1e-3])
 IK_converged = np.zeros((fk_targets.shape[0],1,))
 
-#%%
-# Extract curvature from marker points
+# Iterate IK over data
 for n in range(fk_targets.shape[0]):
     theta_n, convergence = find_curvature(theta_guess, fk_targets[n,:])
     theta_extracted[n,:] = theta_n
@@ -377,7 +404,7 @@ mid = plt.scatter([], [], s=2, c='tab:green',zorder=2.5)
 end = plt.scatter([], [], s=2, c='tab:blue',zorder=2.5)
 curve, = plt.plot([], [])
 
-with writer.saving(fig, data_dir + '/overlay_anim_off_delay47.mp4', 200):
+with writer.saving(fig, data_dir + '/overlay_anim_off_delay47_trim.mp4', 200):
     for idx in range(fk_targets.shape[0]):
         if idx % freq_target == 0:
             print('Generating animation, ' + str(idx/freq_target) + ' of ' + str(t_end) + 's')
@@ -423,32 +450,6 @@ matplotlib.use('module://matplotlib_inline.backend_inline')
 #          X=X, Z=Z, Phi=Phi, Fx=Fx, Fz=Fz, Ty=Ty, 
 #          dX=dX, ddX=ddX, dZ=dZ, 
 #          ddZ=ddZ, dPhi=dPhi, ddPhi=ddPhi)
-
-#%%
-# # Plotting examples
-
-# Plot X
-# plt.plot(t_target[120:200],X[120:200])
-# plt.title('X')
-# plt.show()
-# plt.plot(t_W[380:620],Fx_meas[380:620])
-# plt.title('Fx')
-# plt.show()
-# plt.plot(t_target[100:170],Ty[100:170])
-# plt.title('Ty')
-# plt.show()
-# plt.plot(t_target[100:170],dX[100:170])
-# plt.title('dX')
-# plt.show()
-# plt.plot(t_target[100:170],ddX[100:170])
-# plt.title('ddX')
-# plt.show()
-
-# plt.plot(X_mid,Z_mid)
-# plt.plot(X_end,Z_end)
-# plt.plot(X,Z)
-# plt.axis('equal')
-# plt.xlim(0,0.7)
 
 #%%
 # # Filtering test
