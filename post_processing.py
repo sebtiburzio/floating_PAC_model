@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 #%%
-
-import sys
 import os
 import pickle
 import cv2
@@ -337,7 +335,7 @@ ddTheta1 = signal.savgol_filter(Theta1,SG_window,SG_order,deriv=2,delta=1/freq_t
 
 #%%
 # Save data
-np.savez(data_dir + '/processed', t=t_target, 
+np.savez(data_dir + '/processed', p_vals=p_vals, t=t_target, 
          X=X, Z=Z, Phi=Phi, Theta0=Theta0, Theta1=Theta1, 
          dX=dX,  dZ=dZ, dPhi=dPhi, dTheta0=dTheta0, dTheta1=dTheta1,
          ddX=ddX, ddZ=ddZ, ddPhi=ddPhi, ddTheta0=ddTheta0, ddTheta1=ddTheta1,

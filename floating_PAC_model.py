@@ -1,6 +1,5 @@
-#%%
 #!/usr/bin/env python
-
+#%%
 import time
 import sympy as sm
 import pickle
@@ -37,6 +36,7 @@ alpha = -(theta_0*v + 0.5*theta_1*v**2) # negative curvature so sense matches ro
 fk[0] = L*sm.integrate(sm.sin(alpha),(v, 0, s)) # x. when theta=0, x=0.
 fk[1] = -L*sm.integrate(sm.cos(alpha),(v, 0, s)) # z. when theta=0, z=-L. 
 # A manual subsitution is needed here to get around a SymPy bug: https://github.com/sympy/sympy/issues/25093
+# TODO - not needed any more, update SymPy version and remove
 fk = fk.subs(1/sm.sqrt(theta_1), sm.sqrt(1/theta_1))
 
 # FK of midpoint and endpoint in base frame (for curvature IK)

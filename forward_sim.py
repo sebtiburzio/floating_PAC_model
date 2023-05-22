@@ -1,28 +1,34 @@
 #!/usr/bin/env python
-
-#%matplotlib ipympl
+#%%
+import pickle
 import numpy as np
-import dill
+import mpmath as mp
+import sympy as sm
 from scipy.integrate import solve_ivp
-from scipy import interpolate
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
+from matplotlib.animation import FFMpegWriter
 
 #%%
-# Plotting functions
-
+# Plotting functions # TODO - separate and import from module instead of defining here and in post_processing?
 def plot_FK(q_repl):
-    s_evals = np.linspace(0,1,11)
-    FK_evals = np.empty((s_evals.size,2,))
-    FK_evals[:] = np.nan
-    for i_s in range(s_evals.size):
-       FK_evals[i_s] = f_FK(q_repl,p_vals,s_evals[i_s],0.0).squeeze()
+    FK_evals = get_FK(q_repl)
     fig, ax = plt.subplots()
-    ax.plot(FK_evals[:,0],FK_evals[:,1])
-    plt.xlim(FK_evals[0,0]-1.2,FK_evals[0,0]+1.2)
-    plt.ylim(FK_evals[0,1]-1.2,FK_evals[0,1]+1.2)
+    ax.plot(FK_evals[:,0],FK_evals[:,1],'tab:orange')
+    ax.scatter(FK_evals[10,0],FK_evals[10,1],s=2,c='m',zorder=2.5)
+    ax.scatter(FK_evals[-1,0],FK_evals[-1,1],s=2,c='m',zorder=2.5)
+    plt.xlim(FK_evals[0,0]-0.8,FK_evals[0,0]+0.8)
+    plt.ylim(FK_evals[0,1]-0.8,FK_evals[0,1]+0.2)
+    fig.set_figwidth(8)
     ax.set_aspect('equal','box')
+    ax.grid(True)
     plt.show()
+
+def get_FK(q_repl,num_pts=21):
+    s_evals = np.linspace(0,1,num_pts)
+    FK_evals = np.zeros((s_evals.size,2,1))
+    for i_s in range(s_evals.size):
+       FK_evals[i_s] = np.array(eval_fk(q_repl,p_vals,s_evals[i_s],0.0))
+    return FK_evals.squeeze()
 
 #%%
 # RHS ODE
@@ -36,30 +42,46 @@ def f_dyn(t, y, F):
     if abs(q[1]) < 1e-5:
         q[1] = 1e-5
 
-    G = f_G(q, p_vals)  # TODO evaluate p_vals during function generation
-    B = f_B(q, p_vals)
+    G = eval_G(q)
+    B = eval_B(q)
 
-    C = np.zeros((5,5)) # TODO just remove C if not going to use
-    # C = f_C(q, p_vals, dq)
-
-    LHS = (-C@dq -G -K@q -D@dq + F).transpose().squeeze()
+    LHS = (-G -K@q -D@dq + F).transpose().squeeze() # Not using C matrix
 
     return np.concatenate((dq, np.linalg.inv(B)@LHS))
 
 #%%
-# Import EOM functions TODO - modify for new function generation
+# Import functions 
+# Constant parameters
+m_L, m_E, L, D = sm.symbols('m_L m_E L D')  # m_L - total mass of cable, m_E - mass of weighted end
+p = sm.Matrix([m_L, m_E, L, D])
+# Configuration variables
+theta_0, theta_1, x, z, phi = sm.symbols('theta_0 theta_1 x z phi')
+theta = sm.Matrix([theta_0, theta_1])
+q = sm.Matrix([theta_0, theta_1, x, z, phi])
+# Integration variables
+s, d = sm.symbols('s d')
 
-f_FK = dill.load(open('./generated_functions/f_FK','rb'))
-f_G = dill.load(open('./generated_functions/f_G','rb'))
-f_B = dill.load(open('./generated_functions/f_B','rb'))
-# f_C = dill.load(open('./generated_functions/f_C','rb'))
+# Load forward kinematics
+f_FK = sm.lambdify((q,p,s,d), pickle.load(open("./generated_functions/fk", "rb")), "mpmath")
+# Load EOM functions, replace constant parameters
+p_vals = [1.0, 0.5, 1.0, 0.1]
+F_G = pickle.load(open("./generated_functions/G", "rb"))
+F_B = pickle.load(open("./generated_functions/B", "rb"))
+F_G = F_G.subs([(m_L,p_vals[0]),(m_E,p_vals[1]),(L,p_vals[2]),(D,p_vals[3])])
+F_B = F_B.subs([(m_L,p_vals[0]),(m_E,p_vals[1]),(L,p_vals[2]),(D,p_vals[3])])
+f_G = sm.lambdify(q, F_G, "mpmath")
+f_B = sm.lambdify(q, F_B, "mpmath")
+# Convenience functions to extract real floats from complex mpmath matrices
+def eval_G(q): return np.array(f_G(q[0],q[1],q[2],q[3],q[4]).apply(mp.re).tolist(), dtype=float)
+def eval_B(q): return np.array(f_B(q[0],q[1],q[2],q[3],q[4]).apply(mp.re).tolist(), dtype=float)
+def eval_fk(q, p_vals, s, d): return np.array(f_FK(q, p_vals, s, d).apply(mp.re).tolist(), dtype=float)
 
 #%%
 # Stiffness and damping
 
 k_o = 0.1
-k_x = 1e4
-k_z = 0
+k_x = 0
+k_z = 1e4
 k_phi = 0
 b_o = 0.1
 b_x = 1e-1
@@ -81,9 +103,6 @@ D = np.array([[b_o,        1/2*b_o,    0,      0,      0    ],
 #%%
 # Set up
 
-# Parameters
-p_vals = [1.0, 0.5, 1.0, 0.1]
-
 # Actuation
 F = np.zeros((5,))
 
@@ -93,45 +112,40 @@ dq_0 = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
 
 #%%
 # Solve ODE
+q_ev = solve_ivp(f_dyn, [0, 1.0], np.concatenate((q_0, dq_0)), method='BDF', args=(F,))
+# TODO - previously integration solver crashes just after 3.75s. Now takes really long (maybe still crash, haven't tested to 3.75s)
 
-# TODO - integration solver crashes just after 3.75s
-q_ev = solve_ivp(f_dyn, [0, 3.75], np.concatenate((q_0, dq_0)), method='BDF', args=(F,))
+#%%
+import matplotlib
+matplotlib.use("Agg")
 
-# Old ODE solver
-# q_ev = odeint(f_dyn, np.concatenate((q_0, dq_0)), t = np.linspace(0, 1, 101), args = (F,), tfirst=True)
-
-# %%
-# Animated plot of evolution
-
-# Init plot
-fig = plt.figure(figsize=(5, 4))
-ax = fig.add_subplot(autoscale_on=False)
-ax.set_aspect('equal')
-ax.grid()
-line, = ax.plot([], [], '-', lw=2)
-
-s_evals = np.linspace(0,1,11)
-FK_evals = np.empty((s_evals.size,2,))
-FK_evals[:] = np.nan
-
-# Resample configuration evolution to even timestep
-t_reg = np.arange(0,q_ev.t[-1], 1/60)
+FPS = 30
+t_reg = np.arange(0, q_ev.t[-1], 1/FPS)
 q_reg = np.zeros((t_reg.size, 5))
 for i in range(5):
     q_reg[:,i] = np.interp(t_reg, q_ev.t, q_ev.y[i,:].transpose())
 
-def animate(frame):
-    for i_s in range(s_evals.size):
-        FK_evals[i_s] = f_FK(q_reg[frame,:], p_vals, s_evals[i_s], 0.0).squeeze()
-    line.set_data(FK_evals[:,0], FK_evals[:,1])
-    ax.set_xlim(FK_evals[0,0]-1.2,FK_evals[0,0]+1.2)
-    ax.set_ylim(FK_evals[0,1]-1.2,FK_evals[0,1]+1.2)
-    return line,
+fig, ax = plt.subplots()
+curve, = plt.plot([], [])
+plt.xlim(-(p_vals[2]+0.1), (p_vals[2]+0.1))
+plt.ylim(-(p_vals[2]+0.1), 0.1)
+ax.set_aspect('equal')
+ax.grid(True)
 
-ani = animation.FuncAnimation(fig, animate, len(t_reg), interval=1/60, blit=True)
-plt.show()
+writer = FFMpegWriter(fps=FPS)
+with writer.saving(fig, './sim_videos/' + 'test.mp4', 200):
+    for frame in range(t_reg.size-1):
+        FK_evals = get_FK(q_reg[frame,:])
+        curve.set_data(FK_evals[:,0], FK_evals[:,1])
+        ax.set_xlim(FK_evals[0,0]-1.2,FK_evals[0,0]+1.2)
+        ax.set_ylim(FK_evals[0,1]-1.2,FK_evals[0,1]+1.2)
 
-# TODO
-# check if issues evalauting fk at -ve curvature?
-# trry without high stifffness on z - might be causing issues?
+        writer.grab_frame()
+
+    print("Finished")
+    plt.close(fig)
+
 # %%
+# # Old ODE solver
+# from scipy.integrate import odeint
+# q_ev = odeint(f_dyn, np.concatenate((q_0, dq_0)), t = np.linspace(0, 0.2, 101), args = (F,), tfirst=True)
