@@ -175,7 +175,7 @@ def eval_J_endpt(theta, p_vals): return np.array(f_J_end(theta, p_vals).apply(mp
 
 #%%
 # Data paths
-dataset_name = 'rot_link6_30FPS'
+dataset_name = 'sine_x_15FPS'
 data_date = '0508_tripod'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name  # TODO different in image_processing (extra '/' on end), maybe make same?
 
@@ -216,7 +216,7 @@ markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows
 W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=range(1,7))
 
 # Physical definitions for object set up
-p_vals = [1.0, 1.0, 0.742, 0.015] # cable properties: mass (length), mass (end), length, radius
+p_vals = [0.4, 0.23, 0.742, 0.015] # cable properties: mass (length), mass (end), length, radius
 base_offset = 0.0085 # Z-dir offset of cable attachment point from measured robot EE frame
 
 # Copy relevant planar data
@@ -257,13 +257,13 @@ axs[2].plot(ts_W, Fx_meas)
 axs[3].plot(ts_W, Fz_meas)
 axs[4].plot(ts_W, Ty_meas)
 axs[-1].minorticks_on()
-fig.suptitle('X, Z, Phi, Fx, Fz, Ty')
+fig.suptitle('X_end, Z_end, Phi, Fx, Fz, Ty')
 
 #%%
 # Change these referring to plot, or skip to use full set of available data
-ts_begin = 0.6e10 + 1.6835618e18 
-ts_end = 2.0e10 + 1.6835618e18
-cam_delay = 0.06 # Difference between timestamps of first movement visible in camera and robot state data
+ts_begin = 1.4e10 + 1.6835617e18 
+ts_end = 2.75e10 + 1.6835617e18
+cam_delay = 0.045 # Difference between timestamps of first movement visible in camera and robot state data
 
 #%%
 # Convert absolute ROS timestamps to relative seconds
@@ -291,7 +291,7 @@ t_90Hz = np.arange(0, t_end, 1/90)  # TODO interpolating 100Hz to 90Hz ok?
 Fx_90Hz = np.interp(t_90Hz, t_W, Fx_meas)
 Fz_90Hz = np.interp(t_90Hz, t_W, Fz_meas)
 Ty_90Hz = np.interp(t_90Hz, t_W, Ty_meas)
-Fx = signal.decimate(Fx_90Hz, 3)   # Downsample to 30Hz
+Fx = signal.decimate(Fx_90Hz, 3)   # Downsample to 30Hz # TODO - only set up for 30Hz
 Fz = signal.decimate(Fz_90Hz, 3)
 Ty = signal.decimate(Ty_90Hz, 3)
 # Match images to target timesteps
