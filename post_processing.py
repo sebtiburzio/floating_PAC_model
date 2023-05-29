@@ -175,7 +175,7 @@ def eval_J_endpt(theta, p_vals): return np.array(f_J_end(theta, p_vals).apply(mp
 
 #%%
 # Data paths
-dataset_name = 'sine_x_15FPS'
+dataset_name = 'sine_x_30FPS'
 data_date = '0508_tripod'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name  # TODO different in image_processing (extra '/' on end), maybe make same?
 
@@ -210,6 +210,7 @@ ts_markers = np.loadtxt(data_dir + '/marker_positions.csv', dtype=np.ulonglong, 
 ts_W = np.loadtxt(data_dir + '/EE_wrench.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
 ts_begin = np.max([np.min(ts_OTEE), np.min(ts_markers), np.min(ts_W)])
 ts_end = np.min([np.max(ts_OTEE), np.max(ts_markers), np.max(ts_W)])
+cam_delay = 0.0
 # Measurements
 O_T_EE = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1, usecols=range(1,17))
 markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows=1, usecols=range(1,7))
@@ -217,27 +218,31 @@ W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=r
 
 # Physical definitions for object set up
 p_vals = [0.4, 0.23, 0.742, 0.015] # cable properties: mass (length), mass (end), length, radius
-base_offset = 0.0085 # Z-dir offset of cable attachment point from measured robot EE frame
+base_offset = -0.0085 # Z-dir offset of cable attachment point from measured robot EE frame
 
 # Copy relevant planar data
-RPY_meas = R.from_matrix(np.array([[O_T_EE[:,0], O_T_EE[:,1],O_T_EE[:,2]],
-                                   [O_T_EE[:,4], O_T_EE[:,5],O_T_EE[:,6]],
-                                   [O_T_EE[:,8], O_T_EE[:,9],O_T_EE[:,10]]]).T).as_euler('xyz', degrees=False)
-Phi_meas = RPY_meas[:,1]
-X_meas = O_T_EE[:,12] + base_offset*np.sin(Phi_meas) # Move robot EE position to cable attachment point
-Z_meas = O_T_EE[:,14] - base_offset*np.cos(Phi_meas)
+# Base coordinates
+RMat_EE = np.array([[O_T_EE[:,0], O_T_EE[:,1],O_T_EE[:,2]],
+                    [O_T_EE[:,4], O_T_EE[:,5],O_T_EE[:,6]],
+                    [O_T_EE[:,8], O_T_EE[:,9],O_T_EE[:,10]]]).T
+RPY_EE = R.from_matrix(RMat_EE).as_euler('xyz', degrees=False)
+Phi_meas = RPY_EE[:,1] # HACK - lose information about Pi rotation around X axis that results in inverted Y/Z axes
+X_meas = O_T_EE[:,12] - base_offset*np.sin(Phi_meas) # Move robot EE position to cable attachment point
+Z_meas = O_T_EE[:,14] + base_offset*np.cos(Phi_meas)
 X_base_meas = markers[:,0]
 Z_base_meas = markers[:,1]
 X_mid_meas = markers[:,2]
 Z_mid_meas = markers[:,3]
 X_end_meas = markers[:,4]
 Z_end_meas = markers[:,5]
-Fx_meas = W[:,0] # TODO - adjust F/T meas due to offset from FT frame?
+# Force/torque as measured
+Fx_meas = W[:,0]
 Fz_meas = W[:,2]
 Ty_meas = W[:,4]
 
 #%% 
 #------------------------------- Manual checks and changes - start -------------------------------#
+
 # Check camera calibration
 plot_calib_check()
 
@@ -261,9 +266,9 @@ fig.suptitle('X_end, Z_end, Phi, Fx, Fz, Ty')
 
 #%%
 # Change these referring to plot, or skip to use full set of available data
-ts_begin = 1.4e10 + 1.6835617e18 
-ts_end = 2.75e10 + 1.6835617e18
-cam_delay = 0.045 # Difference between timestamps of first movement visible in camera and robot state data
+ts_begin = 5.7e10 + 1.6835609e18 
+ts_end = 7.0e10 + 1.6835609e18
+cam_delay = 0.03 # Difference between timestamps of first movement visible in camera and robot state data
 
 #%%
 # Convert absolute ROS timestamps to relative seconds
@@ -271,6 +276,21 @@ t_OTEE = ts_OTEE/1e9-ts_begin/1e9
 t_markers = ts_markers/1e9-ts_begin/1e9 -cam_delay # HACK - manual offset for measured camera delay
 t_W = ts_W/1e9-ts_begin/1e9
 t_end = ts_end/1e9-ts_begin/1e9
+
+#%%
+# Express force/torque in robot frame
+Fx_sync = np.interp(t_OTEE, t_W, Fx_meas) # TODO - OK to interp to robot state times here?
+Fz_sync = np.interp(t_OTEE, t_W, Fz_meas)
+Ty_sync = np.interp(t_OTEE, t_W, Ty_meas)
+F_sensor = np.vstack([Fx_sync, np.zeros(len(t_OTEE)), Fz_sync]).T
+T_sensor = np.vstack([np.zeros(len(t_OTEE)), Ty_sync, np.zeros(len(t_OTEE))]).T
+F_robot = np.einsum('ijk,ik->ij', RMat_EE, F_sensor)
+T_robot = np.einsum('ijk,ik->ij', RMat_EE, T_sensor)
+Fx_robot = F_robot[:,0]
+Fz_robot = F_robot[:,2] - (p_vals[0] + p_vals[1])*9.81 # Add weight of cable. TODO - include in data, remove here.
+Ty_robot = T_robot[:,1] # TODO - Adjust F/T meas due to offset from FT frame?'
+# TODO - this is force measured by sensor, opposite force applied to object. Maybe invert.
+
 #-------------------------------- Manual checks and changes - end --------------------------------#
 
 #%%
@@ -286,14 +306,9 @@ X_mid = np.interp(t_target, t_markers, X_mid_meas)
 Z_mid = np.interp(t_target, t_markers, Z_mid_meas)
 X_end = np.interp(t_target, t_markers, X_end_meas)
 Z_end = np.interp(t_target, t_markers, Z_end_meas)
-# Resample other data rates
-t_90Hz = np.arange(0, t_end, 1/90)  # TODO interpolating 100Hz to 90Hz ok?
-Fx_90Hz = np.interp(t_90Hz, t_W, Fx_meas)
-Fz_90Hz = np.interp(t_90Hz, t_W, Fz_meas)
-Ty_90Hz = np.interp(t_90Hz, t_W, Ty_meas)
-Fx = signal.decimate(Fx_90Hz, 3)   # Downsample to 30Hz # TODO - only set up for 30Hz
-Fz = signal.decimate(Fz_90Hz, 3)
-Ty = signal.decimate(Ty_90Hz, 3)
+Fx = np.interp(t_target, t_OTEE, Fx_robot)
+Fz = np.interp(t_target, t_OTEE, Fz_robot)
+Ty = np.interp(t_target, t_OTEE, Ty_robot) 
 # Match images to target timesteps
 idxs = [(np.abs(t_markers - t_t)).argmin() for t_t in t_target] # find closest timestamp to each target timestep
 Img = np.array([ts_markers[i] for i in idxs], dtype=str)
@@ -350,19 +365,19 @@ writer = FFMpegWriter(fps=freq_target)
 
 fig, ax = plt.subplots()
 base, = plt.plot([], [], c='k')
-curve, = plt.plot([], [])
+curve, = plt.plot([], [], zorder=2.3)
 mid = plt.scatter([], [], s=2, c='tab:green',zorder=2.5)
 end = plt.scatter([], [], s=2, c='tab:blue',zorder=2.5)
 Fx_vis,  = plt.plot([], [], c='r')
 Fz_vis,  = plt.plot([], [], c='b')
 Ty_vis,  = plt.plot([], [], c='g')
-Ty_vis_angs = np.arange(0,np.pi,np.pi/10)
+Ty_vis_angs = np.arange(0,np.pi/3,np.pi/10)
 plt.xlim(-(p_vals[2]+0.1), (p_vals[2]+0.1))
 plt.ylim(-(p_vals[2]+0.1), 0.1)
 ax.set_aspect('equal')
 ax.grid(True)
 
-draw_FT = False
+draw_FT = True
 in_robot_frame = True
 post = '_robot' if in_robot_frame else ''
 
@@ -391,17 +406,14 @@ with writer.saving(fig, data_dir + '/videos/curvature_anim' + post + '.mp4', 200
         # Draw Forces/Moments
         if draw_FT:
             if in_robot_frame:
-                Fx_r = rot_XZ_on_Y(np.array([Fx[i],0]),Phi[i])
-                Fz_r = rot_XZ_on_Y(np.array([0,Fz[i]]),Phi[i])
-                Fx_vis.set_data([X[i], X[i]+0.1*Fx_r[0]], [Z[i], Z[i]+0.1*Fx_r[1]])
-                Fz_vis.set_data([X[i], X[i]+0.1*Fz_r[0]], [Z[i], Z[i]+0.1*Fz_r[1]])
-                Ty_vis.set_data(X[i]+Ty[i]*np.cos(Ty_vis_angs),Z[i]+Ty[i]*np.sin(Ty_vis_angs))
-                # Ty_r = np.array([X[i],Z[i]]) + rot_XZ_on_Y(np.array([Ty[i]*np.cos(Ty_vis_angs),Ty[i]*np.sin(Ty_vis_angs)]).T,np.full((10,),Phi[i]))
-                # Ty_vis.set_data([Ty_r[:,0], Ty_r[:,1]])
+                Fx_vis.set_data([X[i], X[i]+0.1*Fx[i]], [Z[i], Z[i]])
+                Fz_vis.set_data([X[i], X[i]], [Z[i], Z[i]+0.1*Fz[i]])
+                # Draw arc from X-axis illustrating torque sense - CW +ve
+                Ty_vis.set_data(X[i]+np.abs(Ty[i])*np.cos(Ty_vis_angs),Z[i]-Ty[i]*np.sin(Ty_vis_angs))
             else:
                 Fx_vis.set_data([0, 0.1*Fx[i]],[0, 0])
                 Fz_vis.set_data([0, 0],[0, 0.1*Fz[i]])
-                Ty_vis.set_data(Ty[i]*np.cos(Ty_vis_angs),Ty[i]*np.sin(Ty_vis_angs))
+                Ty_vis.set_data(np.abs(Ty[i])*np.cos(Ty_vis_angs),-Ty[i]*np.sin(Ty_vis_angs))
         # Centre plot
         if in_robot_frame:
             plt.xlim(XZ[0,0]-(p_vals[2]+0.1), XZ[0,0]+(p_vals[2]+0.1))
@@ -461,20 +473,5 @@ with writer.saving(fig, data_dir + '/videos/overlay_anim' + delay + '.mp4', 200)
     plt.close(fig)
 
 matplotlib.use('module://matplotlib_inline.backend_inline')
-
-#%%
-# # Filtering test
-# plt.plot(t_OTEE[100:170],X_meas[100:170])
-# plt.show()
-# sos = signal.butter(5, 8, fs=freq_target, output='sos', btype='lowpass')
-# X_filt = signal.sosfilt(sos, X)
-# plt.plot(t_target[100:170],X_filt[100:170])
-# plt.show()
-# dX_filt = np.diff(X_filt)/(1/30)
-# plt.plot(t_target[100:170],dX_filt[100:170])
-# plt.show()
-# ddX_filt = np.diff(dX_filt)/(1/30)
-# plt.plot(t_target[100:170],ddX_filt[100:170])
-# plt.show()
 
 # %%
