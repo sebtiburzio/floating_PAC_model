@@ -36,7 +36,7 @@ alpha = -(theta_0*v + 0.5*theta_1*v**2) # negative curvature so sense matches ro
 fk[0] = L*sm.integrate(sm.sin(alpha),(v, 0, s)) # x. when theta=0, x=0.
 fk[1] = -L*sm.integrate(sm.cos(alpha),(v, 0, s)) # z. when theta=0, z=-L. 
 # A manual subsitution is needed here to get around a SymPy bug: https://github.com/sympy/sympy/issues/25093
-# TODO - not needed any more, update SymPy version and remove
+# TODO - remove when fix included in SymPy release
 fk = fk.subs(1/sm.sqrt(theta_1), sm.sqrt(1/theta_1))
 
 # FK of midpoint and endpoint in base frame (for curvature IK)
@@ -47,7 +47,7 @@ J_end_fixed = fk_end_fixed.jacobian(sm.Matrix([theta_0, theta_1]))
 
 # 3DOF floating base
 rot_phi = sm.rot_axis3(phi)[:2,:2]                  # +ve rotations around robot base Y axis
-rot_alpha = sm.rot_axis3(alpha.subs(v,s))[:2,:2]    # TODO - check actual franka_state orientation sign
+rot_alpha = sm.rot_axis3(alpha.subs(v,s))[:2,:2]
 fk = sm.Matrix([x, z]) + rot_phi@(fk + D*rot_alpha@sm.Matrix([0, d]))
 
 toc = time.perf_counter()
@@ -69,9 +69,9 @@ f_J_ef = sm.lambdify((theta,p), J_end_fixed, "mpmath")
 tic = time.perf_counter()
 
 # Energy
-U = m_E*sm.integrate((fk[1].subs(s,1)),(d,-1/2,1/2)) # TODO - check if defintion needs to change due to coordinate change?
+U = m_E*sm.integrate((fk[2].subs(s,1)),(d,-1/2,1/2))
 for i in range(num_masses):
-    U += (m_L/num_masses)*sm.integrate((fk[1].subs(s,i/num_masses)),(d,-1/2,1/2))
+    U += (m_L/num_masses)*sm.integrate((fk[2].subs(s,i/num_masses)),(d,-1/2,1/2))
 
 # Potential force
 G = sm.Matrix([9.81*(U)]).jacobian(q)
@@ -90,7 +90,7 @@ J = (fk.subs(s, 1)).jacobian(q)
 B = 0.5*m_E*sm.integrate(J.transpose()@J, (d, -1/2, 1/2))
 for i in range(num_masses):
     J = (fk.subs(s, i/num_masses)).jacobian(q)
-    B += 0.5*(m_L/num_masses)*sm.integrate(J.transpose()@J, (d, -1.2, 1/2))
+    B += 0.5*(m_L/num_masses)*sm.integrate(J.transpose()@J, (d, -1/2, 1/2))
 
 toc = time.perf_counter()
 print("B gen time: " + str(toc-tic))
