@@ -92,8 +92,8 @@ print('Path: ' + data_dir)
 
 #%%
 # Manual paths for interactive mode
-dataset_name = 'sine_x_30FPS'
-data_date = '0508_tripod'
+dataset_name = 'rot_link6_orange'
+data_date = '0605'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name + '/'
 
 print('Dataset: ' + dataset_name)
@@ -102,20 +102,11 @@ print('Path: ' + data_dir)
 
 #%%
 # Camera intrinsic and extrinsic transforms
-# K matrix from saved camera info
-# TODO - extracting values manually from calibration files... mega hacky but... it'll do? Until anything at all changes and breaks it
-K_line = np.loadtxt(data_dir + 'color_camera_info.txt', dtype='str', delimiter=',', skiprows=10, max_rows=1)
-K_cam = np.array([[float(K_line[0][4:]), 0.0, float(K_line[2])], 
-                  [0.0, float(K_line[4]), float(K_line[5])], 
-                  [0.0, 0.0, 1.0]])
-
-R_line = np.loadtxt(data_dir + '../calib_' + data_date + '.launch', dtype='str', delimiter=' ', skiprows=5, max_rows=1)
-R_cam = R.from_quat([float(R_line[11]), float(R_line[12]), float(R_line[13]), float(R_line[14])]).as_matrix() # cam to base frame
-T_cam = np.array([[float(R_line[6][6:])],[float(R_line[7])],[float(R_line[8])]])
-                 
-E_base = np.hstack([R_cam, T_cam]) # cam to base frame
-E_cam = np.hstack([R_cam.T, -R_cam.T@T_cam]) # base to cam frame
-P = K_cam@E_cam
+with np.load(data_dir + 'TFs.npz') as tfs:
+    P = tfs['P']
+    E_base = tfs['E_base']
+    E_cam = tfs['E_cam']
+    K_cam = tfs['K_cam']
 
 #%%
 # Get img list and display first with grid
@@ -164,13 +155,15 @@ for img_name in imgs:
     mask_B = cv2.inRange(hsv, lower_B, upper_B)
 
     # Crop above base (change depending on img orientation)
-    mask_R[:,:100] = 0
+    mask_R[:,:200] = 0
+    mask_R[:,350:] = 0
     mask_G[:,:500] = 0
-    mask_B[:,:800] = 0
+    mask_G[:,1000:] = 0
+    mask_B[:,:900] = 0
     # Crop trouble areas creating some spurious readings - TODO proper solution, outlier resistant
-    mask_R[:,200:] = 0
-    mask_G[:,800:] = 0
-    # mask_B[:25,:] = 0
+    mask_R[:200,:] = 0
+    mask_G[:200,:] = 0
+    mask_B[:200,:] = 0
 
     # Remove noise from mask
     mask_R = cv2.morphologyEx(mask_R, cv2.MORPH_OPEN, np.ones((5,5)))

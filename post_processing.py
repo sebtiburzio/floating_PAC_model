@@ -175,8 +175,8 @@ def eval_J_endpt(theta, p_vals): return np.array(f_J_end(theta, p_vals).apply(mp
 
 #%%
 # Data paths
-dataset_name = 'sine_x_30FPS'
-data_date = '0508_tripod'
+dataset_name = 'rot_link6_orange'
+data_date = '0605'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name  # TODO different in image_processing (extra '/' on end), maybe make same?
 
 print('Dataset: ' + dataset_name)
@@ -184,26 +184,14 @@ print('Date: ' + data_date)
 print('Path: ' + data_dir)
 
 #%%
-# Camera intrinsic and extrinsic transforms - copied from image_processing - TODO - make better (in both)
-# K matrix from saved camera info
-# HACK - extracting values manually from calibration files... mega hacky but... it'll do? Until anything at all changes and breaks it
-# Probably save it as a nicer numpy format when doing bagfile extraction
-K_line = np.loadtxt(data_dir + '/color_camera_info.txt', dtype='str', delimiter=',', skiprows=10, max_rows=1)
-K_cam = np.array([[float(K_line[0][4:]), 0.0, float(K_line[2])], 
-                  [0.0, float(K_line[4]), float(K_line[5])], 
-                  [0.0, 0.0, 1.0]])
-
-R_line = np.loadtxt(data_dir + '/../calib_' + data_date + '.launch', dtype='str', delimiter=' ', skiprows=5, max_rows=1)
-R_cam = R.from_quat([float(R_line[11]), float(R_line[12]), float(R_line[13]), float(R_line[14])]).as_matrix() # cam to base frame
-T_cam = np.array([[float(R_line[6][6:])],[float(R_line[7])],[float(R_line[8])]])
-                 
-E_base = np.hstack([R_cam, T_cam]) # cam to base frame
-E_cam = np.hstack([R_cam.T, -R_cam.T@T_cam]) # base to cam frame
-P = K_cam@E_cam
-
-#%%
 # Import data
 img_dir = data_dir + '/images'
+# Camera intrinsic and extrinsic transforms
+with np.load(data_dir + '/TFs.npz') as tfs:
+    P = tfs['P']
+    E_base = tfs['E_base']
+    E_cam = tfs['E_cam']
+    K_cam = tfs['K_cam']
 # Timestamps
 ts_OTEE = np.loadtxt(data_dir + '/EE_pose.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
 ts_markers = np.loadtxt(data_dir + '/marker_positions.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
@@ -249,7 +237,8 @@ plot_calib_check()
 #%%
 # !!! The fudge zone !!!
 # Static offsets to correct for camera calibration error
-X_meas = X_meas - 0.008
+X_meas = X_meas - 0.00
+Z_meas = Z_meas - 0.04
 plot_calib_check()
 # !!! Leaving the fudge zone !!!
 
@@ -266,9 +255,9 @@ fig.suptitle('X_end, Z_end, Phi, Fx, Fz, Ty')
 
 #%%
 # Change these referring to plot, or skip to use full set of available data
-ts_begin = 5.7e10 + 1.6835609e18 
-ts_end = 7.0e10 + 1.6835609e18
-cam_delay = 0.03 # Difference between timestamps of first movement visible in camera and robot state data
+ts_begin = 6.25e10 + 1.6859708e18 
+ts_end = 8.0e10 + 1.6859708e18
+cam_delay = 0.0 # Difference between timestamps of first movement visible in camera and robot state data
 
 #%%
 # Convert absolute ROS timestamps to relative seconds
@@ -287,7 +276,7 @@ T_sensor = np.vstack([np.zeros(len(t_OTEE)), Ty_sync, np.zeros(len(t_OTEE))]).T
 F_robot = np.einsum('ijk,ik->ij', RMat_EE, F_sensor)
 T_robot = np.einsum('ijk,ik->ij', RMat_EE, T_sensor)
 Fx_robot = F_robot[:,0]
-Fz_robot = F_robot[:,2] - (p_vals[0] + p_vals[1])*9.81 # Add weight of cable. TODO - include in data, remove here.
+Fz_robot = F_robot[:,2]
 Ty_robot = T_robot[:,1] # TODO - Adjust F/T meas due to offset from FT frame?'
 # TODO - this is force measured by sensor, opposite force applied to object. Maybe invert.
 
@@ -357,7 +346,7 @@ np.savez(data_dir + '/processed', p_vals=p_vals, t=t_target,
          Fx=Fx, Fz=Fz, Ty=Ty)
 
 #%%
-# Curvature extraction animation
+# Curvature extraction animation # TODO - create videos folder if doesnt exist
 import matplotlib
 matplotlib.use("Agg")
 
