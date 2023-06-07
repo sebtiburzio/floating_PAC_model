@@ -92,8 +92,8 @@ print('Path: ' + data_dir)
 
 #%%
 # Manual paths for interactive mode
-dataset_name = 'rot_link6_orange'
-data_date = '0605'
+dataset_name = 'sine_x_black_preload'
+data_date = '0602'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name + '/'
 
 print('Dataset: ' + dataset_name)
@@ -156,14 +156,14 @@ for img_name in imgs:
 
     # Crop above base (change depending on img orientation)
     mask_R[:,:200] = 0
-    mask_R[:,350:] = 0
+    mask_R[:,400:] = 0
     mask_G[:,:500] = 0
-    mask_G[:,1000:] = 0
+    mask_G[:,900:] = 0
     mask_B[:,:900] = 0
     # Crop trouble areas creating some spurious readings - TODO proper solution, outlier resistant
-    mask_R[:200,:] = 0
-    mask_G[:200,:] = 0
-    mask_B[:200,:] = 0
+    # mask_R[:200,:] = 0
+    # mask_G[:200,:] = 0
+    # mask_B[:200,:] = 0
 
     # Remove noise from mask
     mask_R = cv2.morphologyEx(mask_R, cv2.MORPH_OPEN, np.ones((5,5)))
@@ -227,12 +227,12 @@ t_markers = (t_markers - t_markers[0])/1e9
 # end_positions_XYZ = np.array(end_positions_XYZ)
 
 # Check for false detections
-plt.plot(base_positions_px[:,0])
-plt.plot(mid_positions_px[:,0])
-plt.plot(end_positions_px[:,0])
-plt.plot(base_positions_px[:,1])
-plt.plot(mid_positions_px[:,1])
-plt.plot(end_positions_px[:,1])
+plt.plot(base_positions_px[:,0], c='indianred')
+plt.plot(mid_positions_px[:,0], c='seagreen')
+plt.plot(end_positions_px[:,0], c='steelblue')
+plt.plot(base_positions_px[:,1], c='lightcoral')
+plt.plot(mid_positions_px[:,1], c='lightgreen')
+plt.plot(end_positions_px[:,1], c='lightblue')
 
 #%%
 # Export to csv
