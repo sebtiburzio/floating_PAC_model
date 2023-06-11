@@ -24,7 +24,8 @@ def plotim(idx):
     fig = plt.figure(figsize=(14, 12))
     ax = fig.add_subplot(autoscale_on=False)
     ax.set_aspect('equal')
-    ax.grid()
+    ax.minorticks_on()
+    ax.grid(which='both')
     ax.set_xlim(0,img.shape[1])
     ax.set_ylim(0,img.shape[0])
     ax.imshow(img)
@@ -41,6 +42,18 @@ def plot_markers(idx, plot_mask=True, save=False):
     ax.set_xlim(0,img.shape[1])
     ax.set_ylim(0,img.shape[0])
     marker_colors = ['lightcoral','palegreen','lightskyblue']
+    ax.axhline(R_row_start,color=marker_colors[0],lw=1,linestyle=(0, (5, 10)))
+    ax.axhline(R_row_end,color=marker_colors[0],lw=1,linestyle=(0, (5, 10)))
+    ax.axvline(R_col_start,color=marker_colors[0],lw=1,linestyle=(0, (5, 10)))
+    ax.axvline(R_col_end,color=marker_colors[0],lw=1,linestyle=(0, (5, 10)))
+    ax.axhline(G_row_start,color=marker_colors[1],lw=1,linestyle=(0, (5, 10)))
+    ax.axhline(G_row_end,color=marker_colors[1],lw=1,linestyle=(0, (5, 10)))
+    ax.axvline(G_col_start,color=marker_colors[1],lw=1,linestyle=(0, (5, 10)))
+    ax.axvline(G_col_end,color=marker_colors[1],lw=1,linestyle=(0, (5, 10)))
+    ax.axhline(B_row_start,color=marker_colors[2],lw=1,linestyle=(0, (5, 10)))
+    ax.axhline(B_row_end,color=marker_colors[2],lw=1,linestyle=(0, (5, 10)))
+    ax.axvline(B_col_start,color=marker_colors[2],lw=1,linestyle=(0, (5, 10)))
+    ax.axvline(B_col_end,color=marker_colors[2],lw=1,linestyle=(0, (5, 10)))
 
     if plot_mask:
         marker_colors = ['orangered','forestgreen','dodgerblue']
@@ -92,8 +105,8 @@ print('Path: ' + data_dir)
 
 #%%
 # Manual paths for interactive mode
-dataset_name = 'sine_x_black_preload'
-data_date = '0602'
+dataset_name = 'black_swing_wide'
+data_date = '0609'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name + '/'
 
 print('Dataset: ' + dataset_name)
@@ -138,6 +151,11 @@ marker_ts = []
 # dimg_list = os.listdir(data_dir + 'depth/')
 # didx = 0
 
+# Y positions of markers # TODO - get this from EE_pose.csv?
+base_Y = 0.162
+mid_Y = 0.162
+end_Y = 0.167
+
 # Mask range for markers
 lower_R = np.array([0,80,50])
 upper_R = np.array([10,255,255])
@@ -146,6 +164,8 @@ upper_G = np.array([80,255,255])
 lower_B = np.array([90,100,20])
 upper_B = np.array([130,255,255])
 
+count = 0
+test_max = 1e9
 for img_name in imgs:
     img = cv2.imread(img_dir + img_name)
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -154,16 +174,38 @@ for img_name in imgs:
     mask_G = cv2.inRange(hsv, lower_G, upper_G)
     mask_B = cv2.inRange(hsv, lower_B, upper_B)
 
-    # Crop above base (change depending on img orientation)
-    mask_R[:,:200] = 0
-    mask_R[:,400:] = 0
-    mask_G[:,:500] = 0
-    mask_G[:,900:] = 0
-    mask_B[:,:900] = 0
+    # Crop irrelevant areas
+    R_row_start = 50
+    R_row_end = 75
+    R_col_start = 1100
+    R_col_end = 1125
+    G_row_start = 375
+    G_row_end = 500
+    G_col_start = 900
+    G_col_end = 1300
+    B_row_start = 475
+    B_row_end = 900
+    B_col_start = 700
+    B_col_end = 1750
+    mask_R[0:R_row_start,:] = 0
+    mask_R[R_row_end:,:] = 0
+    mask_R[:,0:R_col_start] = 0
+    mask_R[:,R_col_end:] = 0
+    mask_G[0:G_row_start,:] = 0
+    mask_G[G_row_end:,:] = 0
+    mask_G[:,0:G_col_start] = 0
+    mask_G[:,G_col_end:] = 0
+    mask_B[0:B_row_start,:] = 0
+    mask_B[B_row_end:,:] = 0
+    mask_B[:,0:B_col_start] = 0
+    mask_B[:,B_col_end:] = 0
     # Crop trouble areas creating some spurious readings - TODO proper solution, outlier resistant
     # mask_R[:200,:] = 0
     # mask_G[:200,:] = 0
-    # mask_B[:200,:] = 0
+    mask_B[800:,1550:] = 0
+    # mask_B[880:900,700:750] = 0
+    # mask_B[890:950,750:850] = 0
+    # mask_B[875:900,1375:1600] = 0
 
     # Remove noise from mask
     mask_R = cv2.morphologyEx(mask_R, cv2.MORPH_OPEN, np.ones((5,5)))
@@ -173,12 +215,12 @@ for img_name in imgs:
     mask_B = cv2.morphologyEx(mask_B, cv2.MORPH_OPEN, np.ones((5,5)))
     mask_B = cv2.morphologyEx(mask_B, cv2.MORPH_CLOSE, np.ones((5,5)))
     # Remove noise from mask TODO - is this here twice on purpose?
-    mask_R = cv2.morphologyEx(mask_R, cv2.MORPH_OPEN, np.ones((5,5)))
-    mask_R = cv2.morphologyEx(mask_R, cv2.MORPH_CLOSE, np.ones((5,5)))
-    mask_G = cv2.morphologyEx(mask_G, cv2.MORPH_OPEN, np.ones((5,5)))
-    mask_G = cv2.morphologyEx(mask_G, cv2.MORPH_CLOSE, np.ones((5,5)))
-    mask_B = cv2.morphologyEx(mask_B, cv2.MORPH_OPEN, np.ones((5,5)))
-    mask_B = cv2.morphologyEx(mask_B, cv2.MORPH_CLOSE, np.ones((5,5)))
+    # mask_R = cv2.morphologyEx(mask_R, cv2.MORPH_OPEN, np.ones((5,5)))
+    # mask_R = cv2.morphologyEx(mask_R, cv2.MORPH_CLOSE, np.ones((5,5)))
+    # mask_G = cv2.morphologyEx(mask_G, cv2.MORPH_OPEN, np.ones((5,5)))
+    # mask_G = cv2.morphologyEx(mask_G, cv2.MORPH_CLOSE, np.ones((5,5)))
+    # mask_B = cv2.morphologyEx(mask_B, cv2.MORPH_OPEN, np.ones((5,5)))
+    # mask_B = cv2.morphologyEx(mask_B, cv2.MORPH_CLOSE, np.ones((5,5)))
 
     # Mask non-marker pixels
     masked_R = cv2.bitwise_and(img,img,mask=mask_R)
@@ -186,13 +228,13 @@ for img_name in imgs:
     masked_B = cv2.bitwise_and(img,img,mask=mask_B)
 
     # Locate markers at COM of mask
-    base_pos_px = np.round(center_of_mass(mask_R)).astype(int)
-    mid_pos_px = np.round(center_of_mass(mask_G)).astype(int)
-    end_pos_px = np.round(center_of_mass(mask_B)).astype(int)
+    base_pos_px = np.array([0,0]) if np.any(np.isnan(center_of_mass(mask_R))) else np.round(center_of_mass(mask_R)).astype(int)
+    mid_pos_px = np.array([0,0]) if np.any(np.isnan(center_of_mass(mask_G))) else np.round(center_of_mass(mask_G)).astype(int)
+    end_pos_px = np.array([0,0]) if np.any(np.isnan(center_of_mass(mask_B))) else np.round(center_of_mass(mask_B)).astype(int)
     # Convert px location to world frame
-    base_pos_XZplane = UV_to_XZplane(base_pos_px[1],base_pos_px[0],Y=0.05) # TODO - measure actual R marker distance from plane
-    mid_pos_XZplane = UV_to_XZplane(mid_pos_px[1],mid_pos_px[0],Y=0) # TODO - offset cable thickness?
-    end_pos_XZplane = UV_to_XZplane(end_pos_px[1],end_pos_px[0],Y=0)
+    base_pos_XZplane = UV_to_XZplane(base_pos_px[1],base_pos_px[0],Y=base_Y)
+    mid_pos_XZplane = UV_to_XZplane(mid_pos_px[1],mid_pos_px[0],Y=mid_Y) # TODO - offset cable thickness?
+    end_pos_XZplane = UV_to_XZplane(end_pos_px[1],end_pos_px[0],Y=end_Y)
 
     # # Convert px location to world frame, using depth measurement
     # dimg = cv2.imread(data_dir + 'depth/' + dimg_list[didx], cv2.IMREAD_UNCHANGED)
@@ -212,6 +254,10 @@ for img_name in imgs:
     mid_mask_pixels.append(np.where(masked_G[:,:,0] > 0))
     end_mask_pixels.append(np.where(masked_B[:,:,0] > 0))
     marker_ts.append(img_name[:-4])
+
+    count += 1
+    if count > test_max:
+        break
 
 base_positions_px = np.array(base_positions_px)
 mid_positions_px = np.array(mid_positions_px)
