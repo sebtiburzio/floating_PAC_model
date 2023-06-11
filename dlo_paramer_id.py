@@ -10,8 +10,8 @@ import sympy as sm
 #%%
 # Load data
 # Data paths
-dataset_name = 'sine_x_30FPS'
-data_date = '0508_tripod'
+dataset_name = 'sine_x_orange'
+data_date = '0602'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name  # TODO different in image_processing (extra '/' on end), maybe make same?
 
 print('Dataset: ' + dataset_name)
@@ -69,7 +69,7 @@ def eval_B(q): return np.array(f_B(q[0],q[1],q[2],q[3],q[4]).apply(mp.re).tolist
 Q = np.vstack((Theta0, Theta1, X, Z, Phi))
 dQ = np.vstack((dTheta0, dTheta1, dX, dZ, dPhi))
 ddQ = np.vstack((ddTheta0, ddTheta1, ddX, ddZ, ddPhi))
-F = np.vstack((Fx, Fz, Ty))
+F = np.vstack((-Fx, -Fz, -Ty))
 num_samples = Q.shape[1]
 
 #%%
@@ -109,4 +109,5 @@ for sample in range(num_samples):
 # Evalaute Pi matrix
 Pi = np.linalg.pinv(Y)@delta
 print(Pi)
+ np.savetxt(data_dir + '/Pi.txt', Pi, delimiter=',')
 # %%
