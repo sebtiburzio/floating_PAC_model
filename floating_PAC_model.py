@@ -69,9 +69,9 @@ f_J_ef = sm.lambdify((theta,p), J_end_fixed, "mpmath")
 tic = time.perf_counter()
 
 # Energy
-U = m_E*sm.integrate((fk[2].subs(s,1)),(d,-1/2,1/2))
+U = m_E*sm.integrate((fk[1].subs(s,1)),(d,-1/2,1/2))
 for i in range(num_masses):
-    U += (m_L/num_masses)*sm.integrate((fk[2].subs(s,i/num_masses)),(d,-1/2,1/2))
+    U += (m_L/num_masses)*sm.integrate((fk[1].subs(s,i/num_masses)),(d,-1/2,1/2))
 
 # Potential force
 G = sm.Matrix([9.81*(U)]).jacobian(q)
