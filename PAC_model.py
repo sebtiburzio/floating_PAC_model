@@ -10,7 +10,7 @@ import pickle
 # Constant parameters
 m_L, m_E, L, D = sm.symbols('m_L m_E L D')  # m_L - total mass of cable, m_E - mass of weighted end
 p = sm.Matrix([m_L, m_E, L, D])
-num_masses = 2  # Number of masses to discretise along length (not including end mass)
+num_masses = 4  # Number of masses to discretise along length (not including end mass)
 
 # Configuration variables
 theta_0, theta_1 = sm.symbols('theta_0 theta_1')
@@ -99,10 +99,15 @@ pickle.dump(C, open("./generated_functions/fixed/C", "wb"))
 # Linear factorisation by masses
 E = B*ddtheta + C*dtheta + G
 Y = E.jacobian(sm.Matrix([m_L,m_E]))
-# Non-mass dependant part
-delta = E.subs([(m_L,0),(m_E,0)])
+
+pickle.dump(Y, open("./generated_functions/fixed/Y", "wb"))
 
 # %%
-pickle.dump(Y, open("./generated_functions/Y", "wb"))
+# Factor out m_L for identification
+dE_dmL = E.diff(m_L)
+E_mL_0 = E.subs(m_L,0)
+
+pickle.dump(dE_dmL, open("./generated_functions/fixed/dE_dmL", "wb"))
+pickle.dump(E_mL_0, open("./generated_functions/fixed/E_mL_0", "wb"))
 
 # %%
