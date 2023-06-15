@@ -111,3 +111,11 @@ pickle.dump(dE_dmL, open("./generated_functions/fixed/dE_dmL", "wb"))
 pickle.dump(E_mL_0, open("./generated_functions/fixed/E_mL_0", "wb"))
 
 # %%
+# Factor out m_E for identification
+dE_dmE = E.diff(m_E)
+E_mE_0 = E.subs(m_E,0)
+
+pickle.dump(dE_dmE, open("./generated_functions/fixed/dE_dmE", "wb"))
+pickle.dump(E_mE_0, open("./generated_functions/fixed/E_mE_0", "wb"))
+
+# %%

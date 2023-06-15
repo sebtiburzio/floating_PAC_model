@@ -172,6 +172,42 @@ for sample in range(num_samples):
     else:
         Y = np.vstack((Y, Y_n))
 
+# %%
+# Identify end mass, stiffness and damping
+# Load EOM functions, replace constant parameters
+F_dE_dmE = pickle.load(open("./generated_functions/fixed/dE_dmE", "rb"))
+F_dE_dmE = F_dE_dmE.subs([(L,p_vals[2]),(D,p_vals[3])])
+f_dE_dmE = sm.lambdify([theta, dtheta, ddtheta], F_dE_dmE, "mpmath")
+F_E_mE_0 = pickle.load(open("./generated_functions/fixed/E_mE_0", "rb"))
+F_E_mE_0 = F_E_mE_0.subs([(m_L,p_vals[0]),(L,p_vals[2]),(D,p_vals[3])])
+f_E_mE_0 = sm.lambdify([theta, dtheta, ddtheta], F_E_mE_0, "mpmath")
+
+# Convenience functions to extract real floats from complex mpmath matrices
+def eval_dE_dmE(theta, dtheta, ddtheta): return np.array(f_dE_dmE(theta,dtheta,ddtheta).apply(mp.re).tolist(), dtype=float)
+def eval_E_mE_0(theta, dtheta, ddtheta): return np.array(f_E_mE_0(theta,dtheta,ddtheta).apply(mp.re).tolist(), dtype=float)
+
+#%%
+# Calc delta vector & Y matrix
+for sample in range(num_samples):
+    if sample % 10 == 0:
+        print(str(sample) + ' of ' + str(num_samples))
+
+    RHS = - eval_E_mE_0([Theta0[sample], Theta1[sample]], [dTheta0[sample], dTheta1[sample]], [ddTheta0[sample], ddTheta1[sample]])
+    
+    if sample == 0:
+        delta = RHS
+    else:
+        delta = np.vstack((delta, RHS))
+    
+    Y_n = np.hstack((np.array(([c00[sample],c01[sample]],[c10[sample],c11[sample]])), 
+                     eval_dE_dmE([Theta0[sample], Theta1[sample]], [dTheta0[sample], dTheta1[sample]], [ddTheta0[sample], ddTheta1[sample]])
+    ))
+
+    if sample == 0:
+        Y = Y_n
+    else:
+        Y = np.vstack((Y, Y_n))
+
 #%%
 # Evalaute Pi matrix
 Pi = np.linalg.pinv(Y)@delta
