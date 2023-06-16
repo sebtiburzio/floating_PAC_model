@@ -64,7 +64,7 @@ def plot_FK(q_repl):
     ax.grid(True)
     plt.show()
 
-def plot_calib_check():
+def plot_calib_check(): # TODO - make these work with non-zero Y
     img = cv2.cvtColor(cv2.imread(img_dir + '/' + str(ts_markers[0]) + '.jpg'), cv2.COLOR_BGR2RGB)
     fig, ax = plt.subplots()
     ax.imshow(img,alpha=0.5)
@@ -175,8 +175,8 @@ def eval_J_endpt(theta, p_vals): return np.array(f_J_end(theta, p_vals).apply(mp
 
 #%%
 # Data paths
-dataset_name = 'rot_link6_orange'
-data_date = '0605'
+dataset_name = 'black_swing'
+data_date = '0609'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name  # TODO different in image_processing (extra '/' on end), maybe make same?
 
 print('Dataset: ' + dataset_name)
@@ -205,8 +205,8 @@ markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows
 W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=range(1,7))
 
 # Physical definitions for object set up
-p_vals = [0.4, 0.23, 0.742, 0.015] # cable properties: mass (length), mass (end), length, radius
-base_offset = -0.0085 # Z-dir offset of cable attachment point from measured robot EE frame
+p_vals = [0.6, 0.23, 0.61, 0.012] # cable properties: mass (length), mass (end), length, radius
+base_offset = -0.038 # Z-dir offset of cable attachment point from measured robot EE frame
 
 # Copy relevant planar data
 # Base coordinates
@@ -236,9 +236,9 @@ plot_calib_check()
 
 #%%
 # !!! The fudge zone !!!
-# Static offsets to correct for camera calibration error
-X_meas = X_meas - 0.00
-Z_meas = Z_meas - 0.04
+# Static offsets to correct for camera calibration error # TODO - think this is misguided? offsetting real robot position based on bad calibration?
+X_meas = X_meas - 0.01
+Z_meas = Z_meas + 0.01
 plot_calib_check()
 # !!! Leaving the fudge zone !!!
 
@@ -255,8 +255,8 @@ fig.suptitle('X_end, Z_end, Phi, Fx, Fz, Ty')
 
 #%%
 # Change these referring to plot, or skip to use full set of available data
-ts_begin = 6.25e10 + 1.6859708e18 
-ts_end = 8.0e10 + 1.6859708e18
+ts_begin = 2.5e8 + 1.686327287e18 
+ts_end = 94e9 + 1.6863272e18
 cam_delay = 0.0 # Difference between timestamps of first movement visible in camera and robot state data
 
 #%%
@@ -310,7 +310,7 @@ fk_targets_end = np.vstack([X_end-X,Z_end-Z]).T
 fk_targets = np.hstack([rot_XZ_on_Y(fk_targets_mid,-Phi), rot_XZ_on_Y(fk_targets_end,-Phi)])
 
 theta_extracted = np.zeros((fk_targets.shape[0],2,))
-theta_guess = np.array([1e-3, 1e-3])
+theta_guess = np.array([1, 1])
 IK_converged = np.zeros((fk_targets.shape[0],1,))
 
 # Iterate IK over data
@@ -423,7 +423,7 @@ matplotlib.use("Agg")
 writer = FFMpegWriter(fps=freq_target)
 
 fig, ax = plt.subplots()
-image = plt.imshow(np.zeros((720,1280,3)), alpha=0.5) # TODO - get img resolution?
+image = plt.imshow(np.zeros((1080,1920,3)), alpha=0.5) # TODO - get img resolution?
 base = plt.scatter([], [], s=2, c='tab:red',marker='+',zorder=2.5)
 mid = plt.scatter([], [], s=2, c='tab:green',zorder=2.5)
 end = plt.scatter([], [], s=2, c='tab:blue',zorder=2.5)
@@ -450,10 +450,10 @@ with writer.saving(fig, data_dir + '/videos/overlay_anim' + delay + '.mp4', 200)
         mid.set_offsets([mid_proj[0]/mid_proj[2],mid_proj[1]/mid_proj[2]])
         end.set_offsets([end_proj[0]/end_proj[2],end_proj[1]/end_proj[2]])
         # Extracted FK
-        XZ = get_FK([theta_extracted[idx,0],theta_extracted[idx,1],X[idx],Z[idx],Phi[idx]],21)
+        XZ = get_FK([Theta0[idx],Theta1[idx],X[idx],Z[idx],Phi[idx]],21)
         curve_XYZ = np.vstack([XZ[:,0],np.zeros((XZ.shape[0],)),XZ[:,1],np.ones((XZ.shape[0],))])
         FK_evals = P@curve_XYZ
-        curve.set_color('tab:orange' if IK_converged[idx,0] else 'orange')
+        curve.set_color('tab:orange')# if IK_converged[idx,0] else 'orange')
         curve.set_data(FK_evals[0]/FK_evals[2],FK_evals[1]/FK_evals[2])
 
         writer.grab_frame()
@@ -463,4 +463,46 @@ with writer.saving(fig, data_dir + '/videos/overlay_anim' + delay + '.mp4', 200)
 
 matplotlib.use('module://matplotlib_inline.backend_inline')
 
+#%%
+# Animation over camera image (Using theta only)
+import matplotlib
+matplotlib.use("Agg")
+
+writer = FFMpegWriter(fps=freq_target)
+
+fig, ax = plt.subplots()
+image = plt.imshow(np.zeros((1080,1920,3)), alpha=0.5) # TODO - get img resolution?
+base = plt.scatter([], [], s=2, c='tab:red',marker='+',zorder=2.5)
+mid = plt.scatter([], [], s=2, c='tab:green',zorder=2.5)
+end = plt.scatter([], [], s=2, c='tab:blue',zorder=2.5)
+curve, = plt.plot([], [])
+
+delay = ('_delay' + str(int(cam_delay*1e3))) if cam_delay > 0.0 else ''
+
+with writer.saving(fig, data_dir + '/videos/sim_overlay_anim' + delay + '.mp4', 200):
+    for idx in range(Theta0.shape[0]):
+        if idx % freq_target == 0:
+            print('Generating animation, ' + str(idx/freq_target) + ' of ' + str(Theta0.shape[0]*freq_target) + 's')
+
+        img_name = '/' + Img[idx] + '.jpg'
+        img = cv2.cvtColor(cv2.imread(img_dir + img_name), cv2.COLOR_BGR2RGB)
+        image.set_data(img)
+        XZ = get_FK([Theta0[idx],Theta1[idx],X[idx],Z[idx],Phi[idx]],21)
+        curve_XYZ = np.vstack([XZ[:,0],np.zeros((XZ.shape[0],)),XZ[:,1],np.ones((XZ.shape[0],))])
+        FK_evals = P@curve_XYZ
+        curve.set_color('tab:orange')
+        curve.set_data(FK_evals[0]/FK_evals[2],FK_evals[1]/FK_evals[2])
+
+        writer.grab_frame()
+
+    print("Finished")
+    plt.close(fig)
+
+matplotlib.use('module://matplotlib_inline.backend_inline')
+
+#%%
+sim_data = np.loadtxt(data_dir + '/black_swing_sim_k05_b03.csv', dtype=np.float64, delimiter=',')
+t_sim = sim_data[:,0]
+Theta0_sim = sim_data[:,1]
+Theta1_sim = sim_data[:,2]
 # %%
