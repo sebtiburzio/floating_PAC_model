@@ -28,7 +28,25 @@ def plotim(idx):
     ax.grid(which='both')
     ax.set_xlim(0,img.shape[1])
     ax.set_ylim(0,img.shape[0])
+
     ax.imshow(img)
+    
+    grid_btm = P@np.array([np.linspace(0,1.0,11).T,np.zeros(11),np.zeros(11),np.ones(11)])
+    grid_btm = grid_btm/grid_btm[2,:].reshape(1,-1)
+    print(grid_btm)
+    grid_top = P@np.array([np.linspace(0,1.0,11),np.zeros(11),np.ones(11),np.ones(11)])
+    grid_top = grid_top/grid_top[2,:].reshape(1,-1)
+    print(grid_top)
+    grid_left = P@np.array([np.zeros(11),np.zeros(11),np.linspace(0,1.0,11),np.ones(11)])
+    grid_left = grid_left/grid_left[2,:].reshape(1,-1)
+    print(grid_left)
+    grid_right = P@np.array([np.ones(11),np.zeros(11),np.linspace(0,1.0,11),np.ones(11)])
+    grid_right = grid_right/grid_right[2,:].reshape(1,-1)
+    print(grid_right)
+    for i in range(11):
+        ax.plot([grid_btm[0,i],grid_top[0,i]],[grid_btm[1,i],grid_top[1,i]],c='g')
+        ax.plot([grid_left[0,i],grid_right[0,i]],[grid_left[1,i],grid_right[1,i]],c='g')
+
     ax.scatter(EE_start[0],EE_start[1],s=5,c='y')
 
 def plot_markers(idx, plot_mask=True, save=False):
@@ -105,8 +123,8 @@ print('Path: ' + data_dir)
 
 #%%
 # Manual paths for interactive mode
-dataset_name = 'black_swing_wide'
-data_date = '0609'
+dataset_name = 'black_swing'
+data_date = '0619'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name + '/'
 
 print('Dataset: ' + dataset_name)
@@ -126,14 +144,35 @@ with np.load(data_dir + 'TFs.npz') as tfs:
 img_dir = data_dir + 'images/'
 imgs = os.listdir(img_dir)
 imgs.sort()
-# Plot initial EE location to check camera calibration
+# Plot initial EE location to check camera calibration # TODO - add Y plane projection
 EE_start = P@np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1, max_rows=1, usecols=range(13,17))
 EE_start = EE_start/EE_start[2]
 plotim(0)
 
 #%%
+# Define regions of interest
+R_row_start = 600
+R_row_end = 650
+R_col_start = 500
+R_col_end = 550
+G_row_start = 450
+G_row_end = 800
+G_col_start = 900
+G_col_end = 1100
+B_row_start = 50
+B_row_end = 1080
+B_col_start = 1150
+B_col_end = 1500
+#%%
+# Y positions of markers # TODO - get this from EE_pose.csv?
+base_Y = 0.012
+mid_Y = 0.012
+end_Y = 0.017
+print("Assuming base at Y=" + str(base_Y))
+print("Assuming mid at Y=" + str(mid_Y))
+print("Assuming end at Y=" + str(end_Y))
+#%%
 # Process each image in folder
-
 base_positions_px = []
 mid_positions_px = []
 end_positions_px = []
@@ -150,11 +189,6 @@ marker_ts = []
 # end_positions_XYZ = []
 # dimg_list = os.listdir(data_dir + 'depth/')
 # didx = 0
-
-# Y positions of markers # TODO - get this from EE_pose.csv?
-base_Y = 0.162
-mid_Y = 0.162
-end_Y = 0.167
 
 # Mask range for markers
 lower_R = np.array([0,80,50])
@@ -175,18 +209,6 @@ for img_name in imgs:
     mask_B = cv2.inRange(hsv, lower_B, upper_B)
 
     # Crop irrelevant areas
-    R_row_start = 50
-    R_row_end = 75
-    R_col_start = 1100
-    R_col_end = 1125
-    G_row_start = 375
-    G_row_end = 500
-    G_col_start = 900
-    G_col_end = 1300
-    B_row_start = 475
-    B_row_end = 900
-    B_col_start = 700
-    B_col_end = 1750
     mask_R[0:R_row_start,:] = 0
     mask_R[R_row_end:,:] = 0
     mask_R[:,0:R_col_start] = 0
@@ -202,7 +224,7 @@ for img_name in imgs:
     # Crop trouble areas creating some spurious readings - TODO proper solution, outlier resistant
     # mask_R[:200,:] = 0
     # mask_G[:200,:] = 0
-    mask_B[800:,1550:] = 0
+    # mask_B[800:,1550:] = 0
     # mask_B[880:900,700:750] = 0
     # mask_B[890:950,750:850] = 0
     # mask_B[875:900,1375:1600] = 0
@@ -214,13 +236,6 @@ for img_name in imgs:
     mask_G = cv2.morphologyEx(mask_G, cv2.MORPH_CLOSE, np.ones((5,5)))
     mask_B = cv2.morphologyEx(mask_B, cv2.MORPH_OPEN, np.ones((5,5)))
     mask_B = cv2.morphologyEx(mask_B, cv2.MORPH_CLOSE, np.ones((5,5)))
-    # Remove noise from mask TODO - is this here twice on purpose?
-    # mask_R = cv2.morphologyEx(mask_R, cv2.MORPH_OPEN, np.ones((5,5)))
-    # mask_R = cv2.morphologyEx(mask_R, cv2.MORPH_CLOSE, np.ones((5,5)))
-    # mask_G = cv2.morphologyEx(mask_G, cv2.MORPH_OPEN, np.ones((5,5)))
-    # mask_G = cv2.morphologyEx(mask_G, cv2.MORPH_CLOSE, np.ones((5,5)))
-    # mask_B = cv2.morphologyEx(mask_B, cv2.MORPH_OPEN, np.ones((5,5)))
-    # mask_B = cv2.morphologyEx(mask_B, cv2.MORPH_CLOSE, np.ones((5,5)))
 
     # Mask non-marker pixels
     masked_R = cv2.bitwise_and(img,img,mask=mask_R)
@@ -233,7 +248,7 @@ for img_name in imgs:
     end_pos_px = np.array([0,0]) if np.any(np.isnan(center_of_mass(mask_B))) else np.round(center_of_mass(mask_B)).astype(int)
     # Convert px location to world frame
     base_pos_XZplane = UV_to_XZplane(base_pos_px[1],base_pos_px[0],Y=base_Y)
-    mid_pos_XZplane = UV_to_XZplane(mid_pos_px[1],mid_pos_px[0],Y=mid_Y) # TODO - offset cable thickness?
+    mid_pos_XZplane = UV_to_XZplane(mid_pos_px[1],mid_pos_px[0],Y=mid_Y)
     end_pos_XZplane = UV_to_XZplane(end_pos_px[1],end_pos_px[0],Y=end_Y)
 
     # # Convert px location to world frame, using depth measurement
