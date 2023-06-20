@@ -2,6 +2,7 @@
 #%%
 import os
 import pickle
+import csv
 import cv2
 import numpy as np
 import mpmath as mp
@@ -175,8 +176,8 @@ def eval_J_endpt(theta, p_vals): return np.array(f_J_end(theta, p_vals).apply(mp
 
 #%%
 # Data paths
-dataset_name = 'black_swing'
-data_date = '0609'
+dataset_name = 'orange_swing'
+data_date = '0619'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name  # TODO different in image_processing (extra '/' on end), maybe make same?
 
 print('Dataset: ' + dataset_name)
@@ -206,7 +207,7 @@ W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=r
 
 # Physical definitions for object set up
 p_vals = [0.6, 0.23, 0.61, 0.012] # cable properties: mass (length), mass (end), length, radius
-base_offset = -0.038 # Z-dir offset of cable attachment point from measured robot EE frame
+base_offset = -0.01 # Z-dir offset of cable attachment point from measured robot EE frame
 
 # Copy relevant planar data
 # Base coordinates
@@ -237,8 +238,8 @@ plot_calib_check()
 #%%
 # !!! The fudge zone !!!
 # Static offsets to correct for camera calibration error # TODO - think this is misguided? offsetting real robot position based on bad calibration?
-X_meas = X_meas - 0.01
-Z_meas = Z_meas + 0.01
+X_meas = X_meas - 0.002
+Z_meas = Z_meas - 0.033
 plot_calib_check()
 # !!! Leaving the fudge zone !!!
 
@@ -256,7 +257,7 @@ fig.suptitle('X_end, Z_end, Phi, Fx, Fz, Ty')
 #%%
 # Change these referring to plot, or skip to use full set of available data
 ts_begin = 2.5e8 + 1.686327287e18 
-ts_end = 94e9 + 1.6863272e18
+ts_end = 6e9 + 1.68718427e18
 cam_delay = 0.0 # Difference between timestamps of first movement visible in camera and robot state data
 
 #%%
@@ -336,14 +337,6 @@ dTheta0 = signal.savgol_filter(Theta0,SG_window,SG_order,deriv=1,delta=1/freq_ta
 ddTheta0 = signal.savgol_filter(Theta0,SG_window,SG_order,deriv=2,delta=1/freq_target,mode='nearest')
 dTheta1 = signal.savgol_filter(Theta1,SG_window,SG_order,deriv=1,delta=1/freq_target,mode='nearest')
 ddTheta1 = signal.savgol_filter(Theta1,SG_window,SG_order,deriv=2,delta=1/freq_target,mode='nearest')
-
-#%%
-# Save data
-np.savez(data_dir + '/processed', p_vals=p_vals, t=t_target, 
-         X=X, Z=Z, Phi=Phi, Theta0=Theta0, Theta1=Theta1, 
-         dX=dX,  dZ=dZ, dPhi=dPhi, dTheta0=dTheta0, dTheta1=dTheta1,
-         ddX=ddX, ddZ=ddZ, ddPhi=ddPhi, ddTheta0=ddTheta0, ddTheta1=ddTheta1,
-         Fx=Fx, Fz=Fz, Ty=Ty)
 
 #%%
 # Curvature extraction animation # TODO - create videos folder if doesnt exist
@@ -501,6 +494,23 @@ with writer.saving(fig, data_dir + '/videos/sim_overlay_anim' + delay + '.mp4', 
 matplotlib.use('module://matplotlib_inline.backend_inline')
 
 #%%
+# Save data
+np.savez(data_dir + '/processed', p_vals=p_vals, t=t_target, 
+         X=X, Z=Z, Phi=Phi, Theta0=Theta0, Theta1=Theta1, 
+         dX=dX,  dZ=dZ, dPhi=dPhi, dTheta0=dTheta0, dTheta1=dTheta1,
+         ddX=ddX, ddZ=ddZ, ddPhi=ddPhi, ddTheta0=ddTheta0, ddTheta1=ddTheta1,
+         Fx=Fx, Fz=Fz, Ty=Ty)
+# Export to csv for matlab
+with open(data_dir + '/data_out/theta_evolution.csv', 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile, delimiter=',')
+    writer.writerow(['ts', 'Theta0', 'Theta1', 'dTheta0', 'dTheta1', 'ddTheta0', 'ddTheta1'])
+    for n in range(len(t_target)):
+        writer.writerow([t_target[n], 
+                         Theta0[n], Theta1[n],
+                         dTheta0[n], dTheta1[n],
+                         ddTheta0[n], ddTheta1[n]])
+        
+#%% Load matlab data
 sim_data = np.loadtxt(data_dir + '/black_swing_sim_k05_b03.csv', dtype=np.float64, delimiter=',')
 t_sim = sim_data[:,0]
 Theta0_sim = sim_data[:,1]
