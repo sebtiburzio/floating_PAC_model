@@ -47,6 +47,9 @@ fk + D*rot_alpha@sm.Matrix([0, d])
 toc = time.perf_counter()
 print("FK gen time: " + str(toc-tic))
 
+pickle.dump(fk, open("./generated_functions/fixed/fk", "wb"))
+f_FK = sm.lambdify((theta,p,s,d), fk, "mpmath")
+
 #%% 
 # Potential (gravity) vector
 tic = time.perf_counter()
