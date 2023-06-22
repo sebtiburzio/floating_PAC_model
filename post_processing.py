@@ -176,7 +176,7 @@ def eval_J_endpt(theta, p_vals): return np.array(f_J_end(theta, p_vals).apply(mp
 
 #%%
 # Data paths
-dataset_name = 'orange_swing'
+dataset_name = 'black_swing'
 data_date = '0619'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name  # TODO different in image_processing (extra '/' on end), maybe make same?
 
@@ -207,16 +207,16 @@ W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=r
 
 # Physical definitions for object set up
 p_vals = [0.6, 0.23, 0.61, 0.012] # cable properties: mass (length), mass (end), length, radius
-base_offset = -0.01 # Z-dir offset of cable attachment point from measured robot EE frame
+base_offset = -0.028 # Z-dir offset of cable attachment point from measured robot EE frame
 
 # Copy relevant planar data
 # Base coordinates
 RMat_EE = np.array([[O_T_EE[:,0], O_T_EE[:,1],O_T_EE[:,2]],
                     [O_T_EE[:,4], O_T_EE[:,5],O_T_EE[:,6]],
                     [O_T_EE[:,8], O_T_EE[:,9],O_T_EE[:,10]]]).T
-RPY_EE = R.from_matrix(RMat_EE).as_euler('xyz', degrees=False)
-Phi_meas = RPY_EE[:,1] # HACK - lose information about Pi rotation around X axis that results in inverted Y/Z axes
-X_meas = O_T_EE[:,12] - base_offset*np.sin(Phi_meas) # Move robot EE position to cable attachment point
+RPY_EE = R.from_matrix(RMat_EE).as_euler('xyz', degrees=False) # TODO - make this extrinsic so always relative to robot base Y?
+Phi_meas = RPY_EE[:,1] # HACK - lose information about Pi rotation around X axis that results in inverted Y/Z axes. Only works when no Z rotation too.
+X_meas = O_T_EE[:,12] - base_offset*np.sin(Phi_meas) # Move robot EE position to cable attachment point. HACK Only works when no Z rotation too.
 Z_meas = O_T_EE[:,14] + base_offset*np.cos(Phi_meas)
 X_base_meas = markers[:,0]
 Z_base_meas = markers[:,1]
@@ -302,6 +302,11 @@ Ty = np.interp(t_target, t_OTEE, Ty_robot)
 # Match images to target timesteps
 idxs = [(np.abs(t_markers - t_t)).argmin() for t_t in t_target] # find closest timestamp to each target timestep
 Img = np.array([ts_markers[i] for i in idxs], dtype=str)
+
+#%%
+# Optionally use base marker instead of robot EE
+X = X_base
+Z = Z_base
 
 #%%
 # Extract curvature from marker points
@@ -457,43 +462,6 @@ with writer.saving(fig, data_dir + '/videos/overlay_anim' + delay + '.mp4', 200)
 matplotlib.use('module://matplotlib_inline.backend_inline')
 
 #%%
-# Animation over camera image (Using theta only)
-import matplotlib
-matplotlib.use("Agg")
-
-writer = FFMpegWriter(fps=freq_target)
-
-fig, ax = plt.subplots()
-image = plt.imshow(np.zeros((1080,1920,3)), alpha=0.5) # TODO - get img resolution?
-base = plt.scatter([], [], s=2, c='tab:red',marker='+',zorder=2.5)
-mid = plt.scatter([], [], s=2, c='tab:green',zorder=2.5)
-end = plt.scatter([], [], s=2, c='tab:blue',zorder=2.5)
-curve, = plt.plot([], [])
-
-delay = ('_delay' + str(int(cam_delay*1e3))) if cam_delay > 0.0 else ''
-
-with writer.saving(fig, data_dir + '/videos/sim_overlay_anim' + delay + '.mp4', 200):
-    for idx in range(Theta0.shape[0]):
-        if idx % freq_target == 0:
-            print('Generating animation, ' + str(idx/freq_target) + ' of ' + str(Theta0.shape[0]*freq_target) + 's')
-
-        img_name = '/' + Img[idx] + '.jpg'
-        img = cv2.cvtColor(cv2.imread(img_dir + img_name), cv2.COLOR_BGR2RGB)
-        image.set_data(img)
-        XZ = get_FK([Theta0[idx],Theta1[idx],X[idx],Z[idx],Phi[idx]],21)
-        curve_XYZ = np.vstack([XZ[:,0],np.zeros((XZ.shape[0],)),XZ[:,1],np.ones((XZ.shape[0],))])
-        FK_evals = P@curve_XYZ
-        curve.set_color('tab:orange')
-        curve.set_data(FK_evals[0]/FK_evals[2],FK_evals[1]/FK_evals[2])
-
-        writer.grab_frame()
-
-    print("Finished")
-    plt.close(fig)
-
-matplotlib.use('module://matplotlib_inline.backend_inline')
-
-#%%
 # Save data
 np.savez(data_dir + '/processed', p_vals=p_vals, t=t_target, 
          X=X, Z=Z, Phi=Phi, Theta0=Theta0, Theta1=Theta1, 
@@ -511,8 +479,43 @@ with open(data_dir + '/data_out/theta_evolution.csv', 'w', newline='') as csvfil
                          ddTheta0[n], ddTheta1[n]])
         
 #%% Load matlab data
-sim_data = np.loadtxt(data_dir + '/black_swing_sim_k05_b03.csv', dtype=np.float64, delimiter=',')
+sim_data = np.loadtxt(data_dir + '/data_in/black_swing_sim_k2_b015_off_41_n46.csv', dtype=np.float64, delimiter=',')
 t_sim = sim_data[:,0]
 Theta0_sim = sim_data[:,1]
 Theta1_sim = sim_data[:,2]
+
+#%%
+# Animation over camera image (Using theta only)
+import matplotlib
+matplotlib.use("Agg")
+
+writer = FFMpegWriter(fps=freq_target)
+
+fig, ax = plt.subplots()
+image = plt.imshow(np.zeros((1080,1920,3)), alpha=0.5) # TODO - get img resolution?
+base = plt.scatter([], [], s=2, c='tab:red',marker='+',zorder=2.5)
+mid = plt.scatter([], [], s=2, c='tab:green',zorder=2.5)
+end = plt.scatter([], [], s=2, c='tab:blue',zorder=2.5)
+curve, = plt.plot([], [])
+
+with writer.saving(fig, data_dir + '/videos/sim_overlay_anim_off' + '.mp4', 200):
+    for idx in range(t_sim.shape[0]):
+        if idx % freq_target == 0:
+            print('Generating animation, ' + str(idx/freq_target) + ' of ' + str(t_sim.shape[0]/freq_target) + 's')
+
+        img_name = '/' + Img[idx] + '.jpg'
+        img = cv2.cvtColor(cv2.imread(img_dir + img_name), cv2.COLOR_BGR2RGB)
+        image.set_data(img)
+        XZ = get_FK([Theta0_sim[idx],Theta1_sim[idx],X[idx],Z[idx],Phi[idx]],21)
+        curve_XYZ = np.vstack([XZ[:,0],np.zeros((XZ.shape[0],)),XZ[:,1],np.ones((XZ.shape[0],))])
+        FK_evals = P@curve_XYZ
+        curve.set_color('tab:orange')
+        curve.set_data(FK_evals[0]/FK_evals[2],FK_evals[1]/FK_evals[2])
+
+        writer.grab_frame()
+
+    print("Finished")
+    plt.close(fig)
+
+matplotlib.use('module://matplotlib_inline.backend_inline')
 # %%
