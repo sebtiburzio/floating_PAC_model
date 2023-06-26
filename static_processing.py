@@ -19,14 +19,15 @@ def get_FK(q_repl,num_pts=21):
        FK_evals[i_s] = np.array(eval_fk(q_repl,p_vals,s_evals[i_s],0.0))
     return FK_evals.squeeze()
 
+# Plot FK based on theta config and optionally an fk target for comparison
 def plot_FK(q_repl,i=None):
     FK_evals = get_FK(q_repl)
     fig, ax = plt.subplots()
     ax.plot(FK_evals[:,0],FK_evals[:,1],'tab:orange')
     ax.scatter(FK_evals[10,0],FK_evals[10,1],s=2,c='m',zorder=2.5)
     ax.scatter(FK_evals[-1,0],FK_evals[-1,1],s=2,c='m',zorder=2.5)
-    plt.xlim(FK_evals[0,0]-0.8,FK_evals[0,0]+0.8)
-    plt.ylim(FK_evals[0,1]-0.8,FK_evals[0,1]+0.2)
+    plt.xlim(FK_evals[0,0]-1.1*p_vals[2],FK_evals[0,0]+1.1*p_vals[2])
+    plt.ylim(FK_evals[0,1]-1.1*p_vals[2],FK_evals[0,1]+1.1*p_vals[2])
 
     if i is not None:
         plt.scatter(0,0,c='tab:red',marker='+')
@@ -59,11 +60,12 @@ def find_curvature(theta_guess, fk_target, epsilon=0.01, max_iterations=10):
                 return theta_guess, False
             elif error_2norm > error_2norm_last:
                 print("Error increasing after iteration " + str(i))
-                return theta_guess, False
+                return theta_guess_last, False
             else:
+                theta_guess_last = theta_guess
+                error_2norm_last = error_2norm
                 J = np.vstack([eval_J_midpt(theta_guess, p_vals), eval_J_endpt(theta_guess, p_vals)])
                 theta_guess = theta_guess - (np.linalg.pinv(J)@error).squeeze()
-                error_2norm_last = error_2norm
     print("Max iterations reached (check why)")
     return theta_guess, False
 
@@ -100,8 +102,8 @@ def eval_J_endpt(theta, p_vals): return np.array(f_J_end(theta, p_vals).apply(mp
 
 #%%
 # Data paths
-dataset_name = 'black_static_0to34'
-data_date = '0620'
+dataset_name = 'orange_static_combined'
+data_date = '0623'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name  # TODO different in image_processing (extra '/' on end), maybe make same?
 
 print('Dataset: ' + dataset_name)
@@ -109,8 +111,12 @@ print('Date: ' + data_date)
 print('Path: ' + data_dir)
 
 markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows=1, usecols=range(1,7))
-
-p_vals = [0.6, 0.23, 0.61, 0.012] # cable properties: mass (length), mass (end), length, radius
+O_T_EE = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1, usecols=range(1,17))
+RMat_EE = np.array([[O_T_EE[:,0], O_T_EE[:,1],O_T_EE[:,2]],
+                    [O_T_EE[:,4], O_T_EE[:,5],O_T_EE[:,6]],
+                    [O_T_EE[:,8], O_T_EE[:,9],O_T_EE[:,10]]]).T
+RPY_EE = R.from_matrix(RMat_EE).as_euler('xzy', degrees=False) 
+Gamma = RPY_EE[:,2]
 
 # Import marker positions
 X_base_meas = markers[:,0]
@@ -120,9 +126,7 @@ Z_mid_meas = markers[:,3]
 X_end_meas = markers[:,4]
 Z_end_meas = markers[:,5]
 
-#%%
-# Define gravity directions
-Gamma = np.array([0*np.pi/16, 1*np.pi/16, 2*np.pi/16, 3*np.pi/16])
+p_vals = [0.4, 0.23, 0.75, 0.012] # cable properties: mass (length), mass (end), length, radius
 
 #%%
 # Transform marker points to fixed PAC frame (subtract X/Z, rotate back phi)
@@ -134,7 +138,7 @@ fk_targets = np.hstack([rot_XZ_on_Y(fk_targets_mid,-Gamma), rot_XZ_on_Y(fk_targe
 #%%
 # Iterate IK over data
 theta_extracted = np.zeros((fk_targets.shape[0],2,))
-theta_guess = np.array([1e-1, 1e-1])
+theta_guess = np.array([9.5,-14.5])
 IK_converged = np.zeros((fk_targets.shape[0],1,))
 
 for n in range(fk_targets.shape[0]):
@@ -154,7 +158,7 @@ for i in range(len(theta_extracted)):
 # Export to csv for matlab
 if not os.path.exists(data_dir + '/data_out'):
             os.makedirs(data_dir + '/data_out')
-with open(data_dir + '/data_out/theta_evolution.csv', 'w', newline='') as csvfile:
+with open(data_dir + '/data_out/theta_equilibria.csv', 'w', newline='') as csvfile:
     writer = csv.writer(csvfile, delimiter=',')
     writer.writerow(['Gamma', 'Theta0', 'Theta1'])
     for n in range(len(Gamma)):

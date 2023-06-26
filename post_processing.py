@@ -58,8 +58,8 @@ def plot_FK(q_repl):
     ax.plot(FK_evals[:,0],FK_evals[:,1],'tab:orange')
     ax.scatter(FK_evals[10,0],FK_evals[10,1],s=2,c='m',zorder=2.5)
     ax.scatter(FK_evals[-1,0],FK_evals[-1,1],s=2,c='m',zorder=2.5)
-    plt.xlim(FK_evals[0,0]-0.8,FK_evals[0,0]+0.8)
-    plt.ylim(FK_evals[0,1]-0.8,FK_evals[0,1]+0.2)
+    plt.xlim(FK_evals[0,0]-1.1*p_vals[2],FK_evals[0,0]+1.1*p_vals[2])
+    plt.ylim(FK_evals[0,1]-1.1*p_vals[2],FK_evals[0,1]+1.1*p_vals[2])
     fig.set_figwidth(8)
     ax.set_aspect('equal','box')
     ax.grid(True)
@@ -141,11 +141,12 @@ def find_curvature(theta_guess, fk_target, epsilon=0.01, max_iterations=10):
                 return theta_guess, False
             elif error_2norm > error_2norm_last:
                 print("Error increasing after iteration " + str(i))
-                return theta_guess, False
+                return theta_guess_last, False
             else:
+                theta_guess_last = theta_guess
+                error_2norm_last = error_2norm
                 J = np.vstack([eval_J_midpt(theta_guess, p_vals), eval_J_endpt(theta_guess, p_vals)])
                 theta_guess = theta_guess - (np.linalg.pinv(J)@error).squeeze()
-                error_2norm_last = error_2norm
     print("Max iterations reached (check why)")
     return theta_guess, False
 
@@ -214,7 +215,7 @@ base_offset = -0.028 # Z-dir offset of cable attachment point from measured robo
 RMat_EE = np.array([[O_T_EE[:,0], O_T_EE[:,1],O_T_EE[:,2]],
                     [O_T_EE[:,4], O_T_EE[:,5],O_T_EE[:,6]],
                     [O_T_EE[:,8], O_T_EE[:,9],O_T_EE[:,10]]]).T
-RPY_EE = R.from_matrix(RMat_EE).as_euler('xyz', degrees=False) # TODO - make this extrinsic so always relative to robot base Y?
+RPY_EE = R.from_matrix(RMat_EE).as_euler('xyz', degrees=False)
 Phi_meas = RPY_EE[:,1] # HACK - lose information about Pi rotation around X axis that results in inverted Y/Z axes. Only works when no Z rotation too.
 X_meas = O_T_EE[:,12] - base_offset*np.sin(Phi_meas) # Move robot EE position to cable attachment point. HACK Only works when no Z rotation too.
 Z_meas = O_T_EE[:,14] + base_offset*np.cos(Phi_meas)
