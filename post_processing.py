@@ -345,7 +345,10 @@ dTheta1 = signal.savgol_filter(Theta1,SG_window,SG_order,deriv=1,delta=1/freq_ta
 ddTheta1 = signal.savgol_filter(Theta1,SG_window,SG_order,deriv=2,delta=1/freq_target,mode='nearest')
 
 #%%
-# Curvature extraction animation # TODO - create videos folder if doesnt exist
+# Curvature extraction animation
+if not os.path.exists(data_dir + '/videos'):
+            os.makedirs(data_dir + '/videos')
+
 import matplotlib
 matplotlib.use("Agg")
 
@@ -416,6 +419,9 @@ matplotlib.use('module://matplotlib_inline.backend_inline') # TODO -figure out h
 
 #%%
 # Animation over camera image
+if not os.path.exists(data_dir + '/videos'):
+            os.makedirs(data_dir + '/videos')
+
 import matplotlib
 matplotlib.use("Agg")
 
@@ -480,13 +486,16 @@ with open(data_dir + '/data_out/theta_evolution.csv', 'w', newline='') as csvfil
                          ddTheta0[n], ddTheta1[n]])
         
 #%% Load matlab data
-sim_data = np.loadtxt(data_dir + '/data_in/black_swing_sim_k2_b015_off_41_n46.csv', dtype=np.float64, delimiter=',')
+sim_data = np.loadtxt(data_dir + '/data_in/black_swing_sim_newMdef_k2_b025_G40_off_n70_220_long.csv', dtype=np.float64, delimiter=',')
 t_sim = sim_data[:,0]
 Theta0_sim = sim_data[:,1]
 Theta1_sim = sim_data[:,2]
 
 #%%
 # Animation over camera image (Using theta only)
+if not os.path.exists(data_dir + '/videos'):
+            os.makedirs(data_dir + '/videos')
+
 import matplotlib
 matplotlib.use("Agg")
 
@@ -499,15 +508,16 @@ mid = plt.scatter([], [], s=2, c='tab:green',zorder=2.5)
 end = plt.scatter([], [], s=2, c='tab:blue',zorder=2.5)
 curve, = plt.plot([], [])
 
-with writer.saving(fig, data_dir + '/videos/sim_overlay_anim_off' + '.mp4', 200):
+with writer.saving(fig, data_dir + '/videos/sim_overlay_reduce_G40_long' + '.mp4', 200):
     for idx in range(t_sim.shape[0]):
         if idx % freq_target == 0:
             print('Generating animation, ' + str(idx/freq_target) + ' of ' + str(t_sim.shape[0]/freq_target) + 's')
 
-        img_name = '/' + Img[idx] + '.jpg'
+        data_idx = np.min([idx, len(Img)-1])
+        img_name = '/' + Img[data_idx] + '.jpg'
         img = cv2.cvtColor(cv2.imread(img_dir + img_name), cv2.COLOR_BGR2RGB)
         image.set_data(img)
-        XZ = get_FK([Theta0_sim[idx],Theta1_sim[idx],X[idx],Z[idx],Phi[idx]],21)
+        XZ = get_FK([Theta0_sim[idx],Theta1_sim[idx],X[data_idx],Z[data_idx],Phi[data_idx]],21)
         curve_XYZ = np.vstack([XZ[:,0],np.zeros((XZ.shape[0],)),XZ[:,1],np.ones((XZ.shape[0],))])
         FK_evals = P@curve_XYZ
         curve.set_color('tab:orange')
