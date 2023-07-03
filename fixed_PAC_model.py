@@ -42,7 +42,7 @@ fk = fk.subs(1/sm.sqrt(theta_1), sm.sqrt(1/theta_1))
 
 # FK position at d in cross section
 rot_alpha = sm.rot_axis3(alpha.subs(v,s))[:2,:2]
-fk + D*rot_alpha@sm.Matrix([0, d])
+fk = fk + D*rot_alpha@sm.Matrix([0, d])
 
 toc = time.perf_counter()
 print("FK gen time: " + str(toc-tic))
