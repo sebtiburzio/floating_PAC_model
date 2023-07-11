@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 #%%
-import sys
 import os
 import cv2
 import csv
@@ -19,7 +18,7 @@ def showim(img):
     if k == 27:         # wait for ESC key to exit
         cv2.destroyAllWindows()
 
-def plotim(idx):
+def plotim(idx,calib_vis=False):
     img = cv2.cvtColor(cv2.imread(img_dir + imgs[idx]), cv2.COLOR_BGR2RGB)
     fig = plt.figure(figsize=(14, 12))
     ax = fig.add_subplot(autoscale_on=False)
@@ -30,24 +29,37 @@ def plotim(idx):
     ax.set_ylim(0,img.shape[0])
 
     ax.imshow(img)
+    ax.scatter(EE_start[0],EE_start[1],s=5,c='red',zorder=2.5)
     
-    grid_btm = P@np.array([np.linspace(0,1.0,11).T,np.zeros(11),np.zeros(11),np.ones(11)])
-    grid_btm = grid_btm/grid_btm[2,:].reshape(1,-1)
-    print(grid_btm)
-    grid_top = P@np.array([np.linspace(0,1.0,11),np.zeros(11),np.ones(11),np.ones(11)])
-    grid_top = grid_top/grid_top[2,:].reshape(1,-1)
-    print(grid_top)
-    grid_left = P@np.array([np.zeros(11),np.zeros(11),np.linspace(0,1.0,11),np.ones(11)])
-    grid_left = grid_left/grid_left[2,:].reshape(1,-1)
-    print(grid_left)
-    grid_right = P@np.array([np.ones(11),np.zeros(11),np.linspace(0,1.0,11),np.ones(11)])
-    grid_right = grid_right/grid_right[2,:].reshape(1,-1)
-    print(grid_right)
-    for i in range(11):
-        ax.plot([grid_btm[0,i],grid_top[0,i]],[grid_btm[1,i],grid_top[1,i]],c='g')
-        ax.plot([grid_left[0,i],grid_right[0,i]],[grid_left[1,i],grid_right[1,i]],c='g')
-
-    ax.scatter(EE_start[0],EE_start[1],s=5,c='y')
+    if calib_vis:
+        # Z-plane grid
+        grid_btm = P@np.array([np.linspace(-0.2,0.2,5).T,-0.2*np.ones(5),np.zeros(5),np.ones(5)])
+        grid_btm = grid_btm/grid_btm[2,:].reshape(1,-1)
+        grid_top = P@np.array([np.linspace(-0.2,0.2,5).T,0.2*np.ones(5),np.zeros(5),np.ones(5)])
+        grid_top = grid_top/grid_top[2,:].reshape(1,-1)
+        grid_left = P@np.array([-0.2*np.ones(5),np.linspace(-0.2,0.2,5).T,np.zeros(5),np.ones(5)])
+        grid_left = grid_left/grid_left[2,:].reshape(1,-1)
+        grid_right = P@np.array([0.2*np.ones(5),np.linspace(-0.2,0.2,5).T,np.zeros(5),np.ones(5)])
+        grid_right = grid_right/grid_right[2,:].reshape(1,-1)
+        for i in range(5):
+            ax.plot([grid_btm[0,i],grid_top[0,i]],[grid_btm[1,i],grid_top[1,i]],lw=1,c='aqua')
+            ax.plot([grid_left[0,i],grid_right[0,i]],[grid_left[1,i],grid_right[1,i]],lw=1,c='aqua')
+        # Y-plane grid
+        grid_btm = P@np.array([np.linspace(0,1.0,11).T,np.zeros(11),np.zeros(11),np.ones(11)])
+        grid_btm = grid_btm/grid_btm[2,:].reshape(1,-1)
+        grid_top = P@np.array([np.linspace(0,1.0,11),np.zeros(11),np.ones(11),np.ones(11)])
+        grid_top = grid_top/grid_top[2,:].reshape(1,-1)
+        grid_left = P@np.array([np.zeros(11),np.zeros(11),np.linspace(0,1.0,11),np.ones(11)])
+        grid_left = grid_left/grid_left[2,:].reshape(1,-1)
+        grid_right = P@np.array([np.ones(11),np.zeros(11),np.linspace(0,1.0,11),np.ones(11)])
+        grid_right = grid_right/grid_right[2,:].reshape(1,-1)
+        for i in range(11):
+            ax.plot([grid_btm[0,i],grid_top[0,i]],[grid_btm[1,i],grid_top[1,i]],lw=1,c='lime')
+            ax.plot([grid_left[0,i],grid_right[0,i]],[grid_left[1,i],grid_right[1,i]],lw=1,c='lime')
+        # Robot base links
+        base_links = P@np.array([[0,0,0,1],[0,0,0.333,1],[0,-0.15,0.333,1],[0,0.15,0.333,1]]).T
+        base_links = base_links/base_links[2,:].reshape(1,-1)
+        ax.plot(base_links[0,:],base_links[1,:],lw=3,c='slategrey')
 
 def plot_markers(idx, plot_mask=True, save=False):
     img_name = os.listdir(img_dir)[idx]
@@ -97,35 +109,11 @@ def UV_to_XZplane(u,v,Y=0):
     sol = np.linalg.inv(rhs1)@rhs2
     return sol[:3]
 
-# # Todo - troubleshoot/fix depth & clean up, or remove
-# def UV_to_XYZ(u,v):
-#     rhs1 = np.hstack([K_cam,np.array([[-u,-v,-1]]).T])
-#     rhs1 = np.vstack([rhs1, np.array([0,0,1,0])])   # Intersect Z=depth plane
-#     rhs2 = np.array([[0],[0,],[0],[dimg[v,u]/1000]])
-#     sol = np.linalg.inv(rhs1)@rhs2
-#     sol = E_base@sol
-#     return sol[:3]
-
 #%%
-# Paths - TODO check if this works at all
-if len(sys.argv) > 1: # arg is dataset name, assume running from dated data folder
-    dataset_name = str(sys.argv[1])
-    data_dir = os.getcwd() + '/' + dataset_name + '/'
-    data_date = os.path.basename(os.getcwd())
-else: # assume running from dataset folder, inside dated data folder
-    data_dir = os.getcwd()
-    dataset_name = os.path.basename(data_dir)
-    data_date = os.path.basename(os.path.dirname(data_dir))
-    
-print('Dataset: ' + dataset_name)
-print('Date: ' + data_date)
-print('Path: ' + data_dir)
-
-#%%
-# Manual paths for interactive mode
-dataset_name = 'black_swing'
-data_date = '0619'
-data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name + '/'
+# Paths
+dataset_name = 'sine_x_black'
+data_date = '0605'
+data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 
 print('Dataset: ' + dataset_name)
 print('Date: ' + data_date)
@@ -133,7 +121,7 @@ print('Path: ' + data_dir)
 
 #%%
 # Camera intrinsic and extrinsic transforms
-with np.load(data_dir + 'TFs.npz') as tfs:
+with np.load(data_dir + '/TFs.npz') as tfs:
     P = tfs['P']
     E_base = tfs['E_base']
     E_cam = tfs['E_cam']
@@ -141,33 +129,33 @@ with np.load(data_dir + 'TFs.npz') as tfs:
 
 #%%
 # Get img list and display first with grid
-img_dir = data_dir + 'images/'
+img_dir = data_dir + '/images/'
 imgs = os.listdir(img_dir)
 imgs.sort()
-# Plot initial EE location to check camera calibration # TODO - add Y plane projection
+# Plot initial EE location to check camera calibration
 EE_start = P@np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1, max_rows=1, usecols=range(13,17))
 EE_start = EE_start/EE_start[2]
-plotim(0)
+plotim(0,True)
 
 #%%
 # Define regions of interest
-R_row_start = 600
-R_row_end = 650
-R_col_start = 500
-R_col_end = 550
-G_row_start = 450
-G_row_end = 800
-G_col_start = 900
-G_col_end = 1100
-B_row_start = 50
-B_row_end = 1080
-B_col_start = 1150
-B_col_end = 1500
+R_row_start = 200
+R_row_end = 700
+R_col_start = 300
+R_col_end = 400
+G_row_start = 200
+G_row_end = 700
+G_col_start = 700
+G_col_end = 800
+B_row_start = 200
+B_row_end = 700
+B_col_start = 950
+B_col_end = 1100
 #%%
-# Y positions of markers # TODO - get this from EE_pose.csv?
-base_Y = 0.012
-mid_Y = 0.012
-end_Y = 0.017
+# Y positions of markers
+base_Y = 0.0 + 0.01
+mid_Y = 0.0 + 0.01
+end_Y = 0.0 + 0.015
 print("Assuming base at Y=" + str(base_Y))
 print("Assuming mid at Y=" + str(mid_Y))
 print("Assuming end at Y=" + str(end_Y))
@@ -184,19 +172,13 @@ mid_mask_pixels = []
 end_mask_pixels = []
 marker_ts = []
 
-# For depth
-# mid_positions_XYZ = []
-# end_positions_XYZ = []
-# dimg_list = os.listdir(data_dir + 'depth/')
-# didx = 0
-
 # Mask range for markers
 lower_R = np.array([0,80,50])
-upper_R = np.array([10,255,255])
-lower_G = np.array([20,80,20])
-upper_G = np.array([80,255,255])
-lower_B = np.array([90,100,20])
-upper_B = np.array([130,255,255])
+upper_R = np.array([5,255,255])
+lower_G = np.array([28,50,50])
+upper_G = np.array([70,255,255])
+lower_B = np.array([90,100,80])
+upper_B = np.array([110,255,255])
 
 count = 0
 test_max = 1e9
@@ -251,14 +233,6 @@ for img_name in imgs:
     mid_pos_XZplane = UV_to_XZplane(mid_pos_px[1],mid_pos_px[0],Y=mid_Y)
     end_pos_XZplane = UV_to_XZplane(end_pos_px[1],end_pos_px[0],Y=end_Y)
 
-    # # Convert px location to world frame, using depth measurement
-    # dimg = cv2.imread(data_dir + 'depth/' + dimg_list[didx], cv2.IMREAD_UNCHANGED)
-    # mid_pos_XYZ = UV_to_XYZ(mid_pos_px[1],mid_pos_px[0])
-    # end_pos_XYZ = UV_to_XYZ(end_pos_px[1],end_pos_px[0])
-    # mid_positions_XYZ.append(mid_pos_XYZ)
-    # end_positions_XYZ.append(end_pos_XYZ)
-    # didx += 1
-
     base_positions_px.append(base_pos_px)
     mid_positions_px.append(mid_pos_px)
     end_positions_px.append(end_pos_px)
@@ -283,10 +257,6 @@ end_positions_XZplane = np.array(end_positions_XZplane)
 t_markers = np.array(marker_ts, dtype=np.ulonglong)
 t_markers = (t_markers - t_markers[0])/1e9
 
-# # For depth
-# mid_positions_XYZ = np.array(mid_positions_XYZ)
-# end_positions_XYZ = np.array(end_positions_XYZ)
-
 # Check for false detections
 plt.plot(base_positions_px[:,0], c='indianred')
 plt.plot(mid_positions_px[:,0], c='seagreen')
@@ -297,37 +267,38 @@ plt.plot(end_positions_px[:,1], c='lightblue')
 
 #%%
 # Export to csv
-with open(data_dir + 'marker_positions.csv', 'w', newline='') as csvfile:
+with open(data_dir + '/marker_positions.csv', 'w', newline='') as csvfile:
     writer = csv.writer(csvfile, delimiter=',')
-    writer.writerow(['ts', 'base_pos_x', 'base_pos_z', 'mid_pos_x', 'mid_pos_z', 'end_pos_x', 'end_pos_z'])
+    writer.writerow(['ts', 'base_pos_x', 'base_pos_z', 'mid_pos_x', 'mid_pos_z', 'end_pos_x', 'end_pos_z', 'assumed_base_Y', 'assumed_mid_Y', 'assumed_end_Y'])
     for n in range(len(marker_ts)):
         writer.writerow([marker_ts[n], 
                          float(base_positions_XZplane[n,0]), float(base_positions_XZplane[n,2]),
                          float(mid_positions_XZplane[n,0]), float(mid_positions_XZplane[n,2]), 
-                         float(end_positions_XZplane[n,0]), float(end_positions_XZplane[n,2])])
+                         float(end_positions_XZplane[n,0]), float(end_positions_XZplane[n,2]),
+                         float(base_Y), float(mid_Y), float(end_Y)])
 
 #%%
-# Animated plot (requires %matplotlib ipympl) TODO - crashes after a while (ipympl)
-# Init plot
-fig = plt.figure(figsize=(5, 4))
-ax = fig.add_subplot(autoscale_on=False)
-ax.set_aspect('equal')
-ax.grid()
-ax.set_xlim(0,1920)
-ax.set_ylim(0,1080)
-ax.fill
-scatter = ax.scatter([],[])
+# # Animated plot (requires %matplotlib ipympl) TODO - crashes after a while (ipympl)
+# # Init plot
+# fig = plt.figure(figsize=(5, 4))
+# ax = fig.add_subplot(autoscale_on=False)
+# ax.set_aspect('equal')
+# ax.grid()
+# ax.set_xlim(0,1920)
+# ax.set_ylim(0,1080)
+# ax.fill
+# scatter = ax.scatter([],[])
 
-def animate(frame):
-    scatter.set_offsets([np.array(end_positions_px)[frame,1],np.array(end_positions_px)[frame,0]])
-    ax.set_title(t_markers[frame])
-    return scatter,
+# def animate(frame):
+#     scatter.set_offsets([np.array(end_positions_px)[frame,1],np.array(end_positions_px)[frame,0]])
+#     ax.set_title(t_markers[frame])
+#     return scatter,
 
-ani = animation.FuncAnimation(fig, animate, len(mid_positions_px), interval=1000/30, blit=True)
-plt.show()
+# ani = animation.FuncAnimation(fig, animate, len(mid_positions_px), interval=1000/30, blit=True)
+# plt.show()
 
 #%%
-# For multiple points
+# # For multiple points
 # # Find centroid of markers using k-means clustering
 # Y, X = np.where(res[:,:,0] > 0)
 # Z = np.vstack((X,Y)).T
@@ -337,26 +308,3 @@ plt.show()
 # centres.sort(axis=0)
 # marker_positions.append(np.hstack([centres[2,:], centres[4,:]]))
 # marker_ts.append(img_name[:-4])
-
-# plt.scatter(center[:,0],center[:,1])
-# plt.xlim(0,1920)
-# plt.ylim(0,1080)
-# plt.show()
-
-# Init plot
-# fig = plt.figure(figsize=(5, 4))
-# ax = fig.add_subplot(autoscale_on=False)
-# ax.set_aspect('equal')
-# ax.grid()
-# ax.set_xlim(0,1920)
-# ax.set_ylim(0,1080)
-# #scatter = ax.scatter([np.array(marker_positions)[0,0],np.array(marker_positions)[0,2]], [np.array(marker_positions)[0,1],np.array(marker_positions)[0,3]])
-# scatter = ax.scatter([],[])
-
-# def animate(frame):
-#     scatter.set_offsets([np.array(marker_positions)[frame,0],np.array(marker_positions)[frame,1]])
-#     ax.set_title(t_markers[frame])
-#     return scatter,
-
-# ani = animation.FuncAnimation(fig, animate, len(marker_positions), interval=1/30, blit=True)
-# plt.show()
