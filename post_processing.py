@@ -52,7 +52,8 @@ def plot_fk_targets(t_s=0, t_f=1e3):
     plt.axis('equal')
     plt.grid(True)
 
-def plot_FK(q_repl):
+# Plot FK based on theta config and optionally an fk target for comparison
+def plot_FK(q_repl,i=None):
     FK_evals = get_FK(q_repl)
     fig, ax = plt.subplots()
     ax.plot(FK_evals[:,0],FK_evals[:,1],'tab:orange')
@@ -60,6 +61,12 @@ def plot_FK(q_repl):
     ax.scatter(FK_evals[-1,0],FK_evals[-1,1],s=2,c='m',zorder=2.5)
     plt.xlim(FK_evals[0,0]-1.1*p_vals[2],FK_evals[0,0]+1.1*p_vals[2])
     plt.ylim(FK_evals[0,1]-1.1*p_vals[2],FK_evals[0,1]+1.1*p_vals[2])
+
+    if i is not None:
+        plt.scatter(0,0,c='tab:red',marker='+')
+        plt.scatter(fk_targets[i,0],fk_targets[i,1],c='tab:green',marker='+')
+        plt.scatter(fk_targets[i,2],fk_targets[i,3],c='tab:blue',marker='+')
+
     fig.set_figwidth(8)
     ax.set_aspect('equal','box')
     ax.grid(True)
@@ -112,13 +119,15 @@ def plot_on_image(idx):
     plt.show()
 
 # Rotate 2D vectors on XY plane around robot +Y axis
-def rot_XZ_on_Y(XZ,angle):
-    R_angle = np.array([[np.cos(-angle), np.sin(-angle)], 
-                        [-np.sin(-angle), np.cos(-angle)]]).T
-    if len(XZ.shape) == 1:
-        return R_angle@XZ
+def rot_XZ_on_Y(XZs,angles):
+    # HACK - the angles are -ve because R_angle needs to be transposed for einsum to work
+    # I don't know how to get einsum to work otherwise
+    R_angles = np.array([[np.cos(-angles), np.sin(-angles)], 
+                        [-np.sin(-angles), np.cos(-angles)]]).T
+    if len(XZs.shape) == 1:
+        return R_angles@XZs
     else:
-        return np.einsum('ijk,ik->ij', R_angle, XZ)
+        return np.einsum('ijk,ik->ij', R_angles, XZs)
 
 def get_FK(q_repl,num_pts=21):
     s_evals = np.linspace(0,1,num_pts)
@@ -150,7 +159,6 @@ def find_curvature(theta_guess, fk_target, epsilon=0.01, max_iterations=10):
     print("Max iterations reached (check why)")
     return theta_guess, False
 
-
 #%%
 # Import forward kinematics
 # Constant parameters
@@ -177,9 +185,11 @@ def eval_J_endpt(theta, p_vals): return np.array(f_J_end(theta, p_vals).apply(mp
 
 #%%
 # Data paths
-dataset_name = 'black_swing'
-data_date = '0619'
-data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name  # TODO different in image_processing (extra '/' on end), maybe make same?
+dataset_name = 'sine_x_black'
+data_date = '0605'
+data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
+if not os.path.exists(data_dir + '/videos'):
+            os.makedirs(data_dir + '/videos')
 
 print('Dataset: ' + dataset_name)
 print('Date: ' + data_date)
@@ -203,28 +213,36 @@ ts_end = np.min([np.max(ts_OTEE), np.max(ts_markers), np.max(ts_W)])
 cam_delay = 0.0
 # Measurements
 O_T_EE = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1, usecols=range(1,17))
-markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows=1, usecols=range(1,7))
+markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows=1, usecols=range(1,10))
 W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=range(1,7))
 
 # Physical definitions for object set up
-p_vals = [0.6, 0.23, 0.61, 0.012] # cable properties: mass (length), mass (end), length, radius
-base_offset = -0.028 # Z-dir offset of cable attachment point from measured robot EE frame
+p_vals = [0.6, 0.23, 0.61, 0.02] # cable properties: mass (length), mass (end), length, diameter
+base_offset = 0.028 # Offset distance of cable attachment point from measured robot EE frame (in EE frame)
 
 # Copy relevant planar data
-# Base coordinates
+# Base position and orientation from robot state
 RMat_EE = np.array([[O_T_EE[:,0], O_T_EE[:,1],O_T_EE[:,2]],
                     [O_T_EE[:,4], O_T_EE[:,5],O_T_EE[:,6]],
                     [O_T_EE[:,8], O_T_EE[:,9],O_T_EE[:,10]]]).T
+# Extracting relevant Phi for the model assumes planar motion, nominally on the XZ plane.
+# Expectation is that the natural positon of the EE with Z pointing down and X pointing forward is reached with pi rotation around the robot X axis.
+# The Phi angle of the model is then just the rotation around the robot Y axis. Probably incorrect if there is also rotation around the Z axis.
 RPY_EE = R.from_matrix(RMat_EE).as_euler('xyz', degrees=False)
-Phi_meas = RPY_EE[:,1] # HACK - lose information about Pi rotation around X axis that results in inverted Y/Z axes. Only works when no Z rotation too.
-X_meas = O_T_EE[:,12] - base_offset*np.sin(Phi_meas) # Move robot EE position to cable attachment point. HACK Only works when no Z rotation too.
-Z_meas = O_T_EE[:,14] + base_offset*np.cos(Phi_meas)
+Phi_meas = RPY_EE[:,1]
+# Move robot EE position to cable attachment point. This also relies on the assumptions above.
+X_meas = O_T_EE[:,12] - base_offset*np.sin(Phi_meas)
+Z_meas = O_T_EE[:,14] - base_offset*np.cos(Phi_meas)
+# Marker positions extracted from images
 X_base_meas = markers[:,0]
 Z_base_meas = markers[:,1]
 X_mid_meas = markers[:,2]
 Z_mid_meas = markers[:,3]
 X_end_meas = markers[:,4]
 Z_end_meas = markers[:,5]
+# Y positions
+Y_meas = np.mean(O_T_EE[:,13]) # This should be basically constant
+Y_assumed = markers[0,6:9] # The [base, mid, end] Y positions used to extract 3D marker positions from the images (minor offset from nominal plane by object thickness)
 # Force/torque as measured
 Fx_meas = W[:,0]
 Fz_meas = W[:,2]
@@ -238,9 +256,11 @@ plot_calib_check()
 
 #%%
 # !!! The fudge zone !!!
-# Static offsets to correct for camera calibration error # TODO - think this is misguided? offsetting real robot position based on bad calibration?
-X_meas = X_meas - 0.002
-Z_meas = Z_meas - 0.033
+# Static offsets to correct for camera calibration error 
+# TODO - think this is misguided? offsetting real robot position based on bad calibration?
+# Replace with calibration checking/adjustment before experiment
+X_meas = X_meas
+Z_meas = Z_meas - 0.03
 plot_calib_check()
 # !!! Leaving the fudge zone !!!
 
@@ -257,9 +277,9 @@ fig.suptitle('X_end, Z_end, Phi, Fx, Fz, Ty')
 
 #%%
 # Change these referring to plot, or skip to use full set of available data
-ts_begin = 2.5e8 + 1.686327287e18 
-ts_end = 6e9 + 1.68718427e18
-cam_delay = 0.0 # Difference between timestamps of first movement visible in camera and robot state data
+ts_begin = 6.5e10 + 1.6859723e18 
+ts_end = 7.5e10 + 1.6859723e18
+cam_delay = 0.03 # Difference between timestamps of first movement visible in camera and robot state data. Usually 0.03s is close enough.
 
 #%%
 # Convert absolute ROS timestamps to relative seconds
@@ -305,7 +325,7 @@ idxs = [(np.abs(t_markers - t_t)).argmin() for t_t in t_target] # find closest t
 Img = np.array([ts_markers[i] for i in idxs], dtype=str)
 
 #%%
-# Optionally use base marker instead of robot EE
+# Optionally take the object base position from the extracted marker instead of robot state
 X = X_base
 Z = Z_base
 
@@ -317,7 +337,7 @@ fk_targets_end = np.vstack([X_end-X,Z_end-Z]).T
 fk_targets = np.hstack([rot_XZ_on_Y(fk_targets_mid,-Phi), rot_XZ_on_Y(fk_targets_end,-Phi)])
 
 theta_extracted = np.zeros((fk_targets.shape[0],2,))
-theta_guess = np.array([1, 1])
+theta_guess = np.array([1e-3, 1e-3]) # Assume starting hanging straight down
 IK_converged = np.zeros((fk_targets.shape[0],1,))
 
 # Iterate IK over data
@@ -346,8 +366,6 @@ ddTheta1 = signal.savgol_filter(Theta1,SG_window,SG_order,deriv=2,delta=1/freq_t
 
 #%%
 # Curvature extraction animation
-if not os.path.exists(data_dir + '/videos'):
-            os.makedirs(data_dir + '/videos')
 
 import matplotlib
 matplotlib.use("Agg")
@@ -419,8 +437,6 @@ matplotlib.use('module://matplotlib_inline.backend_inline') # TODO -figure out h
 
 #%%
 # Animation over camera image
-if not os.path.exists(data_dir + '/videos'):
-            os.makedirs(data_dir + '/videos')
 
 import matplotlib
 matplotlib.use("Agg")
@@ -428,7 +444,7 @@ matplotlib.use("Agg")
 writer = FFMpegWriter(fps=freq_target)
 
 fig, ax = plt.subplots()
-image = plt.imshow(np.zeros((1080,1920,3)), alpha=0.5) # TODO - get img resolution?
+image = plt.imshow(np.zeros((cv2.imread(img_dir + '/' + Img[0] + '.jpg').shape[0],cv2.imread(img_dir + '/' + Img[0] + '.jpg').shape[1],3)), alpha=0.5)
 base = plt.scatter([], [], s=2, c='tab:red',marker='+',zorder=2.5)
 mid = plt.scatter([], [], s=2, c='tab:green',zorder=2.5)
 end = plt.scatter([], [], s=2, c='tab:blue',zorder=2.5)
@@ -445,11 +461,11 @@ with writer.saving(fig, data_dir + '/videos/overlay_anim' + delay + '.mp4', 200)
         img = cv2.cvtColor(cv2.imread(img_dir + img_name), cv2.COLOR_BGR2RGB)
         image.set_data(img)
         # Base and marker positions
-        base_XYZ = np.array([X[idx],0.0,Z[idx],1.0])
+        base_XYZ = np.array([X[idx],Y_meas,Z[idx],1.0])
         base_proj = P@base_XYZ
-        mid_XYZ = np.array([X_mid[idx],0.0,Z_mid[idx],1.0])
+        mid_XYZ = np.array([X_mid[idx],Y_meas,Z_mid[idx],1.0])
         mid_proj = P@mid_XYZ
-        end_XYZ = np.array([X_end[idx],0.0,Z_end[idx],1.0])
+        end_XYZ = np.array([X_end[idx],Y_meas,Z_end[idx],1.0])
         end_proj = P@end_XYZ
         base.set_offsets([base_proj[0]/base_proj[2],base_proj[1]/base_proj[2]])
         mid.set_offsets([mid_proj[0]/mid_proj[2],mid_proj[1]/mid_proj[2]])
@@ -471,7 +487,7 @@ matplotlib.use('module://matplotlib_inline.backend_inline')
 #%%
 # Save data
 np.savez(data_dir + '/processed', p_vals=p_vals, t=t_target, 
-         X=X, Z=Z, Phi=Phi, Theta0=Theta0, Theta1=Theta1, 
+         X=X, Z=Z, Y=Y_meas, Phi=Phi, Theta0=Theta0, Theta1=Theta1, 
          dX=dX,  dZ=dZ, dPhi=dPhi, dTheta0=dTheta0, dTheta1=dTheta1,
          ddX=ddX, ddZ=ddZ, ddPhi=ddPhi, ddTheta0=ddTheta0, ddTheta1=ddTheta1,
          Fx=Fx, Fz=Fz, Ty=Ty)
@@ -486,15 +502,13 @@ with open(data_dir + '/data_out/theta_evolution.csv', 'w', newline='') as csvfil
                          ddTheta0[n], ddTheta1[n]])
         
 #%% Load matlab data
-sim_data = np.loadtxt(data_dir + '/data_in/black_swing_sim_newMdef_k2_b025_G40_off_n70_220_long.csv', dtype=np.float64, delimiter=',')
+sim_data = np.loadtxt(data_dir + '/data_in/scale_B/black_swing_sim_k078_b0455_BC16536_off_n745_562.csv', dtype=np.float64, delimiter=',')
 t_sim = sim_data[:,0]
 Theta0_sim = sim_data[:,1]
 Theta1_sim = sim_data[:,2]
 
 #%%
 # Animation over camera image (Using theta only)
-if not os.path.exists(data_dir + '/videos'):
-            os.makedirs(data_dir + '/videos')
 
 import matplotlib
 matplotlib.use("Agg")
@@ -502,13 +516,13 @@ matplotlib.use("Agg")
 writer = FFMpegWriter(fps=freq_target)
 
 fig, ax = plt.subplots()
-image = plt.imshow(np.zeros((1080,1920,3)), alpha=0.5) # TODO - get img resolution?
+image = plt.imshow(np.zeros((cv2.imread(img_dir + '/' + Img[0] + '.jpg').shape[0],cv2.imread(img_dir + '/' + Img[0] + '.jpg').shape[1],3)), alpha=0.5)
 base = plt.scatter([], [], s=2, c='tab:red',marker='+',zorder=2.5)
 mid = plt.scatter([], [], s=2, c='tab:green',zorder=2.5)
 end = plt.scatter([], [], s=2, c='tab:blue',zorder=2.5)
 curve, = plt.plot([], [])
 
-with writer.saving(fig, data_dir + '/videos/sim_overlay_reduce_G40_long' + '.mp4', 200):
+with writer.saving(fig, data_dir + '/videos/sim_overlay_static_ID_90_dyn_ID_full_data' + '.mp4', 200):
     for idx in range(t_sim.shape[0]):
         if idx % freq_target == 0:
             print('Generating animation, ' + str(idx/freq_target) + ' of ' + str(t_sim.shape[0]/freq_target) + 's')
@@ -518,7 +532,7 @@ with writer.saving(fig, data_dir + '/videos/sim_overlay_reduce_G40_long' + '.mp4
         img = cv2.cvtColor(cv2.imread(img_dir + img_name), cv2.COLOR_BGR2RGB)
         image.set_data(img)
         XZ = get_FK([Theta0_sim[idx],Theta1_sim[idx],X[data_idx],Z[data_idx],Phi[data_idx]],21)
-        curve_XYZ = np.vstack([XZ[:,0],np.zeros((XZ.shape[0],)),XZ[:,1],np.ones((XZ.shape[0],))])
+        curve_XYZ = np.vstack([XZ[:,0],Y_meas*np.ones((XZ.shape[0],)),XZ[:,1],np.ones((XZ.shape[0],))])
         FK_evals = P@curve_XYZ
         curve.set_color('tab:orange')
         curve.set_data(FK_evals[0]/FK_evals[2],FK_evals[1]/FK_evals[2])
