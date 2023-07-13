@@ -5,9 +5,7 @@ import cv2
 import csv
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
 from scipy.ndimage import center_of_mass
-from scipy.spatial.transform import Rotation as R
 
 #%%
 # Shows image in pop up without crashing jupyter
@@ -29,7 +27,7 @@ def plotim(idx,calib_vis=False):
     ax.set_ylim(0,img.shape[0])
 
     ax.imshow(img)
-    ax.scatter(EE_start[0],EE_start[1],s=5,c='red',zorder=2.5)
+    ax.scatter(EE_start_px[0],EE_start_px[1],s=5,c='red',zorder=2.5)
     
     if calib_vis:
         # Z-plane grid
@@ -111,8 +109,8 @@ def UV_to_XZplane(u,v,Y=0):
 
 #%%
 # Paths
-dataset_name = 'sine_x_black'
-data_date = '0605'
+dataset_name = 'black_swing'
+data_date = '0619'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 
 print('Dataset: ' + dataset_name)
@@ -133,29 +131,30 @@ img_dir = data_dir + '/images/'
 imgs = os.listdir(img_dir)
 imgs.sort()
 # Plot initial EE location to check camera calibration
-EE_start = P@np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1, max_rows=1, usecols=range(13,17))
-EE_start = EE_start/EE_start[2]
+EE_start_XYZ = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1, max_rows=1, usecols=range(13,17))
+EE_start_px = P@EE_start_XYZ
+EE_start_px = EE_start_px/EE_start_px[2]
 plotim(0,True)
+# TODO - allow calibration adjustment here?
 
 #%%
 # Define regions of interest
-R_row_start = 200
-R_row_end = 700
-R_col_start = 300
-R_col_end = 400
-G_row_start = 200
-G_row_end = 700
-G_col_start = 700
-G_col_end = 800
-B_row_start = 200
-B_row_end = 700
-B_col_start = 950
-B_col_end = 1100
-#%%
-# Y positions of markers
-base_Y = 0.0 + 0.01
-mid_Y = 0.0 + 0.01
-end_Y = 0.0 + 0.015
+R_row_start = 600
+R_row_end = 650
+R_col_start = 525
+R_col_end = 550
+G_row_start = 450
+G_row_end = 800
+G_col_start = 900
+G_col_end = 1100
+B_row_start = 50
+B_row_end = 1080
+B_col_start = 1150
+B_col_end = 1550
+# Set Y positions of markers
+base_Y = EE_start_XYZ[1] + 0.01
+mid_Y = EE_start_XYZ[1] + 0.01
+end_Y = EE_start_XYZ[1] + 0.015
 print("Assuming base at Y=" + str(base_Y))
 print("Assuming mid at Y=" + str(mid_Y))
 print("Assuming end at Y=" + str(end_Y))
@@ -171,6 +170,9 @@ base_mask_pixels = []
 mid_mask_pixels = []
 end_mask_pixels = []
 marker_ts = []
+base_no_detection = [] # Keeps track of times where no marker pixels were detected
+mid_no_detection = []
+end_no_detection = []
 
 # Mask range for markers
 lower_R = np.array([0,80,50])
@@ -180,8 +182,13 @@ upper_G = np.array([70,255,255])
 lower_B = np.array([90,100,80])
 upper_B = np.array([110,255,255])
 
+# Estimate starting positions
+base_pos_px = np.array([625,550])
+mid_pos_px = np.array([500,950])
+end_pos_px = np.array([100,1200])
+
 count = 0
-test_max = 1e9
+test_max = 1e2
 for img_name in imgs:
     img = cv2.imread(img_dir + img_name)
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -203,7 +210,7 @@ for img_name in imgs:
     mask_B[B_row_end:,:] = 0
     mask_B[:,0:B_col_start] = 0
     mask_B[:,B_col_end:] = 0
-    # Crop trouble areas creating some spurious readings - TODO proper solution, outlier resistant
+    # Crop trouble areas creating some spurious readings
     # mask_R[:200,:] = 0
     # mask_G[:200,:] = 0
     # mask_B[800:,1550:] = 0
@@ -228,6 +235,44 @@ for img_name in imgs:
     base_pos_px = np.array([0,0]) if np.any(np.isnan(center_of_mass(mask_R))) else np.round(center_of_mass(mask_R)).astype(int)
     mid_pos_px = np.array([0,0]) if np.any(np.isnan(center_of_mass(mask_G))) else np.round(center_of_mass(mask_G)).astype(int)
     end_pos_px = np.array([0,0]) if np.any(np.isnan(center_of_mass(mask_B))) else np.round(center_of_mass(mask_B)).astype(int)
+
+    # # Locate markers at COM of mask contours - if multiple contours choose the closest to previous position
+    # # TODO - if marker crosses another contour it can switch and not recover
+    # # TODO - contour COM seems to have slightly more noise than mask COM, should be possible to get equivalent results but maybe not worth looking into
+    # # R
+    # if np.any(np.isnan(center_of_mass(mask_R))):
+    #     base_no_detection.append(count)
+    #     # previous base_pos_px will be used again
+    # else:
+    #     contours_R, _ = cv2.findContours(mask_R, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    #     contour_COMs = []
+    #     for c in contours_R:
+    #         contour_COMs.append(np.mean(c.squeeze(),axis=0))
+    #     contour_COMs = np.array([np.array(contour_COMs)[:,1],np.array(contour_COMs)[:,0]]).T # Contours are [x,y] not [row,col]
+    #     base_pos_px =  contour_COMs[np.argmin(np.linalg.norm(base_pos_px-contour_COMs,axis=1))]
+    # # G
+    # if np.any(np.isnan(center_of_mass(mask_G))):
+    #     mid_no_detection.append(count)
+    #     # previous mid_pos_px will be used again
+    # else:   
+    #     contours_G, _ = cv2.findContours(mask_G, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    #     contour_COMs = []
+    #     for c in contours_G:
+    #         contour_COMs.append(np.mean(c.squeeze(),axis=0))
+    #     contour_COMs = np.array([np.array(contour_COMs)[:,1],np.array(contour_COMs)[:,0]]).T
+    #     mid_pos_px = contour_COMs[np.argmin(np.linalg.norm(mid_pos_px-contour_COMs,axis=1))]
+    # # B
+    # if np.any(np.isnan(center_of_mass(mask_B))):
+    #     end_no_detection.append(count)
+    #     # previous end_pos_px will be used again
+    # else:
+    #     contours_B, _ = cv2.findContours(mask_B, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    #     contour_COMs = []
+    #     for c in contours_B:
+    #         contour_COMs.append(np.mean(c.squeeze(),axis=0))
+    #     contour_COMs = np.array([np.array(contour_COMs)[:,1],np.array(contour_COMs)[:,0]]).T
+    #     end_pos_px = contour_COMs[np.argmin(np.linalg.norm(end_pos_px-contour_COMs,axis=1))]
+
     # Convert px location to world frame
     base_pos_XZplane = UV_to_XZplane(base_pos_px[1],base_pos_px[0],Y=base_Y)
     mid_pos_XZplane = UV_to_XZplane(mid_pos_px[1],mid_pos_px[0],Y=mid_Y)
