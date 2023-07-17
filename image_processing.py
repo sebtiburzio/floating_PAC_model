@@ -60,7 +60,7 @@ def plotim(idx,calib_vis=False):
         ax.plot(base_links[0,:],base_links[1,:],lw=3,c='slategrey')
 
 def plot_markers(idx, plot_mask=True, save=False):
-    img_name = os.listdir(img_dir)[idx]
+    img_name = imgs[idx]
     img = cv2.cvtColor(cv2.imread(img_dir + img_name), cv2.COLOR_BGR2RGB)
 
     fig = plt.figure(figsize=(7.5, 6))
