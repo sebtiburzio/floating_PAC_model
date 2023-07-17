@@ -1,10 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+# TODO - how to make it so common functions can be reused with both fixed and floating base functions?
 from generated_functions.fixed.fixed_base_functions import eval_fk, eval_midpt, eval_endpt, eval_J_midpt, eval_J_endpt
 
 def rot_XZ_on_Y(XZs,angles):
-    # HACK - the angles are -ve because R_angle needs to be transposed for einsum to work
+    # HACK - the angles are -ve because R_angles needs to be transposed for einsum to work
     # I don't know how to get einsum to work otherwise
     R_angles = np.array([[np.cos(-angles), np.sin(-angles)], 
                         [-np.sin(-angles), np.cos(-angles)]]).T
@@ -21,7 +22,7 @@ def get_FK(p_vals,q_repl,num_pts=21):
     return FK_evals.squeeze()
 
 # Plot FK based on theta config and optionally an fk target for comparison
-def plot_FK(p_vals,q_repl,fk_targets,i=None):
+def plot_FK(p_vals,q_repl,fk_targets=None):
     FK_evals = get_FK(p_vals,q_repl)
     fig, ax = plt.subplots()
     ax.plot(FK_evals[:,0],FK_evals[:,1],'tab:orange')
@@ -30,10 +31,10 @@ def plot_FK(p_vals,q_repl,fk_targets,i=None):
     plt.xlim(FK_evals[0,0]-1.1*p_vals[2],FK_evals[0,0]+1.1*p_vals[2])
     plt.ylim(FK_evals[0,1]-1.1*p_vals[2],FK_evals[0,1]+1.1*p_vals[2])
 
-    if i is not None:
+    if fk_targets is not None:
         plt.scatter(0,0,c='tab:red',marker='+')
-        plt.scatter(fk_targets[i,0],fk_targets[i,1],c='tab:green',marker='+')
-        plt.scatter(fk_targets[i,2],fk_targets[i,3],c='tab:blue',marker='+')
+        plt.scatter(fk_targets[0],fk_targets[1],c='tab:green',marker='+')
+        plt.scatter(fk_targets[2],fk_targets[3],c='tab:blue',marker='+')
 
     fig.set_figwidth(8)
     ax.set_aspect('equal','box')
