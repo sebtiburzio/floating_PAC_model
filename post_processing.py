@@ -185,8 +185,8 @@ def eval_J_endpt(theta, p_vals): return np.array(f_J_end(theta, p_vals).apply(mp
 
 #%%
 # Data paths
-dataset_name = 'sine_x_black'
-data_date = '0605'
+dataset_name = 'orange_weighted_full_ACW'
+data_date = '0714'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 if not os.path.exists(data_dir + '/videos'):
             os.makedirs(data_dir + '/videos')
@@ -217,7 +217,7 @@ markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows
 W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=range(1,7))
 
 # Physical definitions for object set up
-p_vals = [0.6, 0.23, 0.61, 0.02] # cable properties: mass (length), mass (end), length, diameter
+p_vals = [0.4, 0.23, 0.75, 0.015] # cable properties: mass (length), mass (end), length, diameter
 base_offset = 0.028 # Offset distance of cable attachment point from measured robot EE frame (in EE frame)
 
 # Copy relevant planar data
@@ -230,6 +230,7 @@ RMat_EE = np.array([[O_T_EE[:,0], O_T_EE[:,1],O_T_EE[:,2]],
 # The Phi angle of the model is then just the rotation around the robot Y axis. Probably incorrect if there is also rotation around the Z axis.
 RPY_EE = R.from_matrix(RMat_EE).as_euler('xyz', degrees=False)
 Phi_meas = RPY_EE[:,1]
+plt.plot(Phi_meas)
 # Move robot EE position to cable attachment point. This also relies on the assumptions above.
 X_meas = O_T_EE[:,12] - base_offset*np.sin(Phi_meas)
 Z_meas = O_T_EE[:,14] - base_offset*np.cos(Phi_meas)
@@ -277,8 +278,8 @@ fig.suptitle('X_end, Z_end, Phi, Fx, Fz, Ty')
 
 #%%
 # Change these referring to plot, or skip to use full set of available data
-ts_begin = 6.5e10 + 1.6859723e18 
-ts_end = 7.5e10 + 1.6859723e18
+ts_begin = 5.6e10 + 1.6893532e18 
+ts_end = 9.3e10 + 1.6893532e18
 cam_delay = 0.03 # Difference between timestamps of first movement visible in camera and robot state data. Usually 0.03s is close enough.
 
 #%%
@@ -306,7 +307,7 @@ Ty_robot = T_robot[:,1] # TODO - Adjust F/T meas due to offset from FT frame?'
 
 #%%
 # Interpolate to uniform sample times
-freq_target = 30
+freq_target = 6
 t_target = np.arange(0, t_end, 1/freq_target)
 X = np.interp(t_target, t_OTEE, X_meas)
 Z = np.interp(t_target, t_OTEE, Z_meas)
@@ -337,12 +338,12 @@ fk_targets_end = np.vstack([X_end-X,Z_end-Z]).T
 fk_targets = np.hstack([rot_XZ_on_Y(fk_targets_mid,-Phi), rot_XZ_on_Y(fk_targets_end,-Phi)])
 
 theta_extracted = np.zeros((fk_targets.shape[0],2,))
-theta_guess = np.array([1e-3, 1e-3]) # Assume starting hanging straight down
+theta_guess = np.array([-6.384623250815462,11.25180334393975]) # Assume starting hanging straight down
 IK_converged = np.zeros((fk_targets.shape[0],1,))
 
 # Iterate IK over data
 for n in range(fk_targets.shape[0]):
-    theta_n, convergence = find_curvature(theta_guess, fk_targets[n,:])
+    theta_n, convergence = find_curvature(theta_guess, fk_targets[n,:], 0.005)
     theta_extracted[n,:] = theta_n
     theta_guess = theta_n
     IK_converged[n] = convergence
@@ -370,7 +371,7 @@ ddTheta1 = signal.savgol_filter(Theta1,SG_window,SG_order,deriv=2,delta=1/freq_t
 import matplotlib
 matplotlib.use("Agg")
 
-writer = FFMpegWriter(fps=freq_target)
+writer = FFMpegWriter(fps=30)
 
 fig, ax = plt.subplots()
 base, = plt.plot([], [], c='k')
@@ -386,8 +387,8 @@ plt.ylim(-(p_vals[2]+0.1), 0.1)
 ax.set_aspect('equal')
 ax.grid(True)
 
-draw_FT = True
-in_robot_frame = True
+draw_FT = False
+in_robot_frame = False
 post = '_robot' if in_robot_frame else ''
 
 with writer.saving(fig, data_dir + '/videos/curvature_anim' + post + '.mp4', 200):
@@ -441,7 +442,7 @@ matplotlib.use('module://matplotlib_inline.backend_inline') # TODO -figure out h
 import matplotlib
 matplotlib.use("Agg")
 
-writer = FFMpegWriter(fps=freq_target)
+writer = FFMpegWriter(fps=30)
 
 fig, ax = plt.subplots()
 image = plt.imshow(np.zeros((cv2.imread(img_dir + '/' + Img[0] + '.jpg').shape[0],cv2.imread(img_dir + '/' + Img[0] + '.jpg').shape[1],3)), alpha=0.5)
@@ -472,7 +473,7 @@ with writer.saving(fig, data_dir + '/videos/overlay_anim' + delay + '.mp4', 200)
         end.set_offsets([end_proj[0]/end_proj[2],end_proj[1]/end_proj[2]])
         # Extracted FK
         XZ = get_FK([Theta0[idx],Theta1[idx],X[idx],Z[idx],Phi[idx]],21)
-        curve_XYZ = np.vstack([XZ[:,0],np.zeros((XZ.shape[0],)),XZ[:,1],np.ones((XZ.shape[0],))])
+        curve_XYZ = np.vstack([XZ[:,0],Y_meas*np.ones((XZ.shape[0],)),XZ[:,1],np.ones((XZ.shape[0],))])
         FK_evals = P@curve_XYZ
         curve.set_color('tab:orange')# if IK_converged[idx,0] else 'orange')
         curve.set_data(FK_evals[0]/FK_evals[2],FK_evals[1]/FK_evals[2])
@@ -492,6 +493,8 @@ np.savez(data_dir + '/processed', p_vals=p_vals, t=t_target,
          ddX=ddX, ddZ=ddZ, ddPhi=ddPhi, ddTheta0=ddTheta0, ddTheta1=ddTheta1,
          Fx=Fx, Fz=Fz, Ty=Ty)
 # Export to csv for matlab
+if not os.path.exists(data_dir + '/data_out'):
+            os.makedirs(data_dir + '/data_out')
 with open(data_dir + '/data_out/theta_evolution.csv', 'w', newline='') as csvfile:
     writer = csv.writer(csvfile, delimiter=',')
     writer.writerow(['ts', 'Theta0', 'Theta1', 'dTheta0', 'dTheta1', 'ddTheta0', 'ddTheta1'])
@@ -500,6 +503,13 @@ with open(data_dir + '/data_out/theta_evolution.csv', 'w', newline='') as csvfil
                          Theta0[n], Theta1[n],
                          dTheta0[n], dTheta1[n],
                          ddTheta0[n], ddTheta1[n]])
+with open(data_dir + '/data_out/theta_equilibria.csv', 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile, delimiter=',')
+    writer.writerow(['Gamma', 'Theta0', 'Theta1', 'X_mid', 'Z_mid', 'X_end', 'Z_end'])
+    for n in range(len(t_target)):
+        writer.writerow([Phi[n], Theta0[n], Theta1[n], 
+                        fk_targets[n,0], fk_targets[n,1], 
+                        fk_targets[n,2], fk_targets[n,3]])
         
 #%% Load matlab data
 sim_data = np.loadtxt(data_dir + '/data_in/scale_B/black_swing_sim_k078_b0455_BC16536_off_n745_562.csv', dtype=np.float64, delimiter=',')
