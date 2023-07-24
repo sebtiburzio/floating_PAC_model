@@ -185,8 +185,8 @@ def eval_J_endpt(theta, p_vals): return np.array(f_J_end(theta, p_vals).apply(mp
 
 #%%
 # Data paths
-dataset_name = 'orange_weighted_full_ACW'
-data_date = '0714'
+dataset_name = 'black_grid_horiz_RHS'
+data_date = '0724'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 if not os.path.exists(data_dir + '/videos'):
             os.makedirs(data_dir + '/videos')
@@ -217,8 +217,8 @@ markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows
 W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=range(1,7))
 
 # Physical definitions for object set up
-p_vals = [0.4, 0.23, 0.75, 0.015] # cable properties: mass (length), mass (end), length, diameter
-base_offset = 0.028 # Offset distance of cable attachment point from measured robot EE frame (in EE frame)
+p_vals = [0.6, 0.23, 0.6, 0.02] # cable properties: mass (length), mass (end), length, diameter
+base_offset = 0.0485 # Offset distance of cable attachment point from measured robot EE frame (in EE frame)
 
 # Copy relevant planar data
 # Base position and orientation from robot state
@@ -228,9 +228,9 @@ RMat_EE = np.array([[O_T_EE[:,0], O_T_EE[:,1],O_T_EE[:,2]],
 # Extracting relevant Phi for the model assumes planar motion, nominally on the XZ plane.
 # Expectation is that the natural positon of the EE with Z pointing down and X pointing forward is reached with pi rotation around the robot X axis.
 # The Phi angle of the model is then just the rotation around the robot Y axis. Probably incorrect if there is also rotation around the Z axis.
-RPY_EE = R.from_matrix(RMat_EE).as_euler('xyz', degrees=False)
-Phi_meas = RPY_EE[:,1]
-plt.plot(Phi_meas)
+RPY_EE = R.from_matrix(RMat_EE).as_euler('xzy', degrees=False)
+Phi_meas = RPY_EE[:,2]
+plt.plot(RPY_EE)
 # Move robot EE position to cable attachment point. This also relies on the assumptions above.
 X_meas = O_T_EE[:,12] - base_offset*np.sin(Phi_meas)
 Z_meas = O_T_EE[:,14] - base_offset*np.cos(Phi_meas)
@@ -278,8 +278,8 @@ fig.suptitle('X_end, Z_end, Phi, Fx, Fz, Ty')
 
 #%%
 # Change these referring to plot, or skip to use full set of available data
-ts_begin = 5.6e10 + 1.6893532e18 
-ts_end = 9.3e10 + 1.6893532e18
+ts_begin = 4.9e11 + 1.690194e18 
+ts_end = 6.1e11 + 1.690194e18
 cam_delay = 0.03 # Difference between timestamps of first movement visible in camera and robot state data. Usually 0.03s is close enough.
 
 #%%
