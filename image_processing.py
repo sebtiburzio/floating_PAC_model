@@ -16,7 +16,7 @@ def showim(img):
     if k == 27:         # wait for ESC key to exit
         cv2.destroyAllWindows()
 
-def plotim(idx,calib_vis=False):
+def plotim(idx,calib_vis=False,testpt=None):
     img = cv2.cvtColor(cv2.imread(img_dir + imgs[idx]), cv2.COLOR_BGR2RGB)
     fig = plt.figure(figsize=(14, 12))
     ax = fig.add_subplot(autoscale_on=False)
@@ -55,9 +55,13 @@ def plotim(idx,calib_vis=False):
             ax.plot([grid_btm[0,i],grid_top[0,i]],[grid_btm[1,i],grid_top[1,i]],lw=1,c='lime')
             ax.plot([grid_left[0,i],grid_right[0,i]],[grid_left[1,i],grid_right[1,i]],lw=1,c='lime')
         # Robot base links
-        base_links = P@np.array([[0,0,0,1],[0,0,0.333,1],[0,-0.15,0.333,1],[0,0.15,0.333,1]]).T
+        base_links = P@np.array([[0,0,0,1],[0,0,0.333,1]]).T #,[0,-0.15,0.333,1],[0,0.15,0.333,1] # Joint2 axis if Joint=0
         base_links = base_links/base_links[2,:].reshape(1,-1)
         ax.plot(base_links[0,:],base_links[1,:],lw=3,c='slategrey')
+
+    if testpt is not None:
+        ax.scatter(testpt[0],testpt[1],s=5,c='yellow',zorder=2.5)
+    print(imgs[idx])
 
 def plot_markers(idx, plot_mask=True, save=False):
     img_name = imgs[idx]
@@ -109,8 +113,8 @@ def UV_to_XZplane(u,v,Y=0):
 
 #%%
 # Paths
-dataset_name = 'orange_weighted_combined'
-data_date = '0714'
+dataset_name = 'k000100Ton000500Ti003000'
+data_date = '0721'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 
 print('Dataset: ' + dataset_name)
@@ -135,7 +139,7 @@ EE_start_XYZ = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1, 
 EE_start_px = P@EE_start_XYZ
 EE_start_px = EE_start_px/EE_start_px[2]
 plotim(0,True)
-# TODO - allow calibration adjustment here?
+# TODO - adjust camera calibration here?
 
 #%%
 # Define regions of interest
@@ -148,13 +152,26 @@ G_row_end = 1080
 G_col_start = 700
 G_col_end = 1150
 B_row_start = 150
-B_row_end = 1000
+B_row_end = 1080
 B_col_start = 1350
 B_col_end = 1850
+# For full image
+R_row_start = 0
+R_row_end = 1080
+R_col_start = 0
+R_col_end = 1920
+G_row_start = 0
+G_row_end = 1080
+G_col_start = 0
+G_col_end = 1920
+B_row_start = 0
+B_row_end = 1080
+B_col_start = 0
+B_col_end = 1920
 # Set Y positions of markers
-base_Y = EE_start_XYZ[1] - 0.0075
-mid_Y = EE_start_XYZ[1] - 0.0075
-end_Y = EE_start_XYZ[1] - 0.015
+base_Y = EE_start_XYZ[1] - 0.01
+mid_Y = EE_start_XYZ[1] - 0.01
+end_Y = EE_start_XYZ[1] - 0.02
 print("Assuming base at Y=" + str(base_Y))
 print("Assuming mid at Y=" + str(mid_Y))
 print("Assuming end at Y=" + str(end_Y))
@@ -183,9 +200,9 @@ lower_B = np.array([90,100,60])
 upper_B = np.array([120,255,255])
 
 # Estimate starting positions
-base_pos_px = np.array([550,325])
-mid_pos_px = np.array([225,750])
-end_pos_px = np.array([225,1425])
+base_pos_px = np.array([0,1000])
+mid_pos_px = np.array([300,1050])
+end_pos_px = np.array([750,1050])
 
 count = 0
 test_max = 1e9
