@@ -77,14 +77,14 @@ def plot_calib_check(): # TODO - make these work with non-zero Y
     fig, ax = plt.subplots()
     ax.imshow(img,alpha=0.5)
     # End effector measured by robot
-    EE_XYZ = np.array([O_T_EE[0,12],0.0,O_T_EE[0,14],1.0])
-    EE_X_axis = np.array([O_T_EE[0,12]+0.05,0.0,O_T_EE[0,14],1.0]) # HACK - only if Phi_meas[0] = 0
-    EE_Z_axis = np.array([O_T_EE[0,12],0.0,O_T_EE[0,14]-0.05,1.0]) #
+    EE_XYZ = np.array([O_T_EE[0,12],O_T_EE[0,13],O_T_EE[0,14],1.0])
+    EE_X_axis = np.array([O_T_EE[0,12]+0.05,O_T_EE[0,13],O_T_EE[0,14],1.0]) # HACK - only if Phi_meas[0] = 0
+    EE_Z_axis = np.array([O_T_EE[0,12],O_T_EE[0,13],O_T_EE[0,14]-0.05,1.0]) #
     EE_proj = P@EE_XYZ
     EE_X_axis_proj = P@EE_X_axis
     EE_Z_axis_proj = P@EE_Z_axis
     # Base of cable incorporating offset from EE
-    base_XYZ = np.array([X_meas[0],0.0,Z_meas[0],1.0])
+    base_XYZ = np.array([X_meas[0],O_T_EE[0,13],Z_meas[0],1.0])
     base_proj = P@base_XYZ
     ax.scatter(base_proj[0]/base_proj[2],base_proj[1]/base_proj[2],s=2,c='yellow',zorder=2.5)
     # Planar axes
@@ -185,8 +185,8 @@ def eval_J_endpt(theta, p_vals): return np.array(f_J_end(theta, p_vals).apply(mp
 
 #%%
 # Data paths
-dataset_name = 'orange_weighted_full_ACW'
-data_date = '0714'
+dataset_name = 'k000100Ton000500Ti003000/grid_RHS'
+data_date = '0721'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 if not os.path.exists(data_dir + '/videos'):
             os.makedirs(data_dir + '/videos')
@@ -229,8 +229,8 @@ RMat_EE = np.array([[O_T_EE[:,0], O_T_EE[:,1],O_T_EE[:,2]],
 # Expectation is that the natural positon of the EE with Z pointing down and X pointing forward is reached with pi rotation around the robot X axis.
 # The Phi angle of the model is then just the rotation around the robot Y axis. Probably incorrect if there is also rotation around the Z axis.
 RPY_EE = R.from_matrix(RMat_EE).as_euler('xyz', degrees=False)
+plt.plot(RPY_EE)
 Phi_meas = RPY_EE[:,1]
-plt.plot(Phi_meas)
 # Move robot EE position to cable attachment point. This also relies on the assumptions above.
 X_meas = O_T_EE[:,12] - base_offset*np.sin(Phi_meas)
 Z_meas = O_T_EE[:,14] - base_offset*np.cos(Phi_meas)
@@ -278,8 +278,8 @@ fig.suptitle('X_end, Z_end, Phi, Fx, Fz, Ty')
 
 #%%
 # Change these referring to plot, or skip to use full set of available data
-ts_begin = 5.6e10 + 1.6893532e18 
-ts_end = 9.3e10 + 1.6893532e18
+ts_begin = 1.7e11 + 1.689958e18 
+ts_end = 2.7e11 + 1.689958e18
 cam_delay = 0.03 # Difference between timestamps of first movement visible in camera and robot state data. Usually 0.03s is close enough.
 
 #%%
