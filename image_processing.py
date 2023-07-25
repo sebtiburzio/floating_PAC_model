@@ -113,8 +113,8 @@ def UV_to_XZplane(u,v,Y=0):
 
 #%%
 # Paths
-dataset_name = 'k000100Ton000500Ti003000'
-data_date = '0721'
+dataset_name = 'black_grid_horiz_RHS'
+data_date = '0724'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 
 print('Dataset: ' + dataset_name)
@@ -171,7 +171,7 @@ B_col_end = 1920
 # Set Y positions of markers
 base_Y = EE_start_XYZ[1] - 0.01
 mid_Y = EE_start_XYZ[1] - 0.01
-end_Y = EE_start_XYZ[1] - 0.02
+end_Y = EE_start_XYZ[1] - 0.015
 print("Assuming base at Y=" + str(base_Y))
 print("Assuming mid at Y=" + str(mid_Y))
 print("Assuming end at Y=" + str(end_Y))
@@ -200,9 +200,9 @@ lower_B = np.array([90,100,60])
 upper_B = np.array([120,255,255])
 
 # Estimate starting positions
-base_pos_px = np.array([0,1000])
-mid_pos_px = np.array([300,1050])
-end_pos_px = np.array([750,1050])
+base_pos_px = np.array([975,1030])
+mid_pos_px = np.array([1000,500])
+end_pos_px = np.array([975,900])
 
 count = 0
 test_max = 1e9
