@@ -1,16 +1,18 @@
 #!/usr/bin/env python
 #%%
 import os
-import pickle
 import csv
 import cv2
 import numpy as np
-import mpmath as mp
-import sympy as sm
 from scipy import signal
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 from matplotlib.animation import FFMpegWriter
+
+from utils import rot_XZ_on_Y, get_FK, find_curvature
+from generated_functions.floating.floating_base_functions import eval_fk
+from generated_functions.fixed.fixed_base_functions import eval_midpt, eval_endpt, eval_J_midpt, eval_J_endpt
+target_evaluators = [eval_midpt, eval_endpt, eval_J_midpt, eval_J_endpt]
 
 #%%
 # For plotting multiple data in a normalised time window
@@ -52,26 +54,6 @@ def plot_fk_targets(t_s=0, t_f=1e3):
     plt.axis('equal')
     plt.grid(True)
 
-# Plot FK based on theta config and optionally an fk target for comparison
-def plot_FK(q_repl,i=None):
-    FK_evals = get_FK(q_repl)
-    fig, ax = plt.subplots()
-    ax.plot(FK_evals[:,0],FK_evals[:,1],'tab:orange')
-    ax.scatter(FK_evals[10,0],FK_evals[10,1],s=2,c='m',zorder=2.5)
-    ax.scatter(FK_evals[-1,0],FK_evals[-1,1],s=2,c='m',zorder=2.5)
-    plt.xlim(FK_evals[0,0]-1.1*p_vals[2],FK_evals[0,0]+1.1*p_vals[2])
-    plt.ylim(FK_evals[0,1]-1.1*p_vals[2],FK_evals[0,1]+1.1*p_vals[2])
-
-    if i is not None:
-        plt.scatter(0,0,c='tab:red',marker='+')
-        plt.scatter(fk_targets[i,0],fk_targets[i,1],c='tab:green',marker='+')
-        plt.scatter(fk_targets[i,2],fk_targets[i,3],c='tab:blue',marker='+')
-
-    fig.set_figwidth(8)
-    ax.set_aspect('equal','box')
-    ax.grid(True)
-    plt.show()
-
 def plot_calib_check():
     img = cv2.cvtColor(cv2.imread(img_dir + '/' + str(ts_markers[0]) + '.jpg'), cv2.COLOR_BGR2RGB)
     fig, ax = plt.subplots()
@@ -110,78 +92,13 @@ def plot_on_image(idx):
     ax.scatter(mid_proj[0]/mid_proj[2],mid_proj[1]/mid_proj[2],s=2,c='tab:green',zorder=2.5)
     ax.scatter(end_proj[0]/end_proj[2],end_proj[1]/end_proj[2],s=2,c='tab:blue',zorder=2.5)
     # Extracted FK
-    XZ = get_FK([theta_extracted[idx,0],theta_extracted[idx,1],X[idx],Z[idx],Phi[idx]],21)
+    XZ = get_FK(p_vals,[theta_extracted[idx,0],theta_extracted[idx,1],X[idx],Z[idx],Phi[idx]],eval_fk,21)
     curve_XYZ = np.vstack([XZ[:,0],np.zeros((XZ.shape[0],)),XZ[:,1],np.ones((XZ.shape[0],))])
     FK_evals = P@curve_XYZ
     ax.plot(FK_evals[0]/FK_evals[2],FK_evals[1]/FK_evals[2],c='tab:orange' if IK_converged[idx] else 'orange')
     ax.scatter(FK_evals[0,10]/FK_evals[2,10],FK_evals[1,10]/FK_evals[2,10],s=2,c='m',zorder=2.5)
     ax.scatter(FK_evals[0,-1]/FK_evals[2,-1],FK_evals[1,-1]/FK_evals[2,-1],s=2,c='m',zorder=2.5)
     plt.show()
-
-# Rotate 2D vectors on XY plane around robot +Y axis
-def rot_XZ_on_Y(XZs,angles):
-    # HACK - the angles are -ve because R_angle needs to be transposed for einsum to work
-    # I don't know how to get einsum to work otherwise
-    R_angles = np.array([[np.cos(-angles), np.sin(-angles)], 
-                        [-np.sin(-angles), np.cos(-angles)]]).T
-    if len(XZs.shape) == 1:
-        return R_angles@XZs
-    else:
-        return np.einsum('ijk,ik->ij', R_angles, XZs)
-
-def get_FK(q_repl,num_pts=21):
-    s_evals = np.linspace(0,1,num_pts)
-    FK_evals = np.zeros((s_evals.size,2,1))
-    for i_s in range(s_evals.size):
-       FK_evals[i_s] = np.array(eval_fk(q_repl,p_vals,s_evals[i_s],0.0))
-    return FK_evals.squeeze()
-
-def find_curvature(theta_guess, fk_target, epsilon=0.01, max_iterations=10):  
-    error_2norm_last = np.inf
-    for i in range(max_iterations):
-        error = (np.vstack([eval_midpt(theta_guess,p_vals), eval_endpt(theta_guess,p_vals)]) - fk_target.reshape(4,1))
-        error_2norm = np.linalg.norm(error)
-        if error_2norm < epsilon:
-            print("Converged after " + str(i) + " iterations")
-            return theta_guess, True
-        else:
-            if np.isclose(error_2norm, error_2norm_last):
-                print("Error stable after iteration " + str(i))
-                return theta_guess, False
-            elif error_2norm > error_2norm_last:
-                print("Error increasing after iteration " + str(i))
-                return theta_guess_last, False
-            else:
-                theta_guess_last = theta_guess
-                error_2norm_last = error_2norm
-                J = np.vstack([eval_J_midpt(theta_guess, p_vals), eval_J_endpt(theta_guess, p_vals)])
-                theta_guess = theta_guess - (np.linalg.pinv(J)@error).squeeze()
-    print("Max iterations reached (check why)")
-    return theta_guess, False
-
-#%%
-# Import forward kinematics
-# Constant parameters
-m_L, m_E, L, D = sm.symbols('m_L m_E L D')  # m_L - total mass of cable, m_E - mass of weighted end
-p = sm.Matrix([m_L, m_E, L, D])
-# Configuration variables
-theta_0, theta_1, x, z, phi = sm.symbols('theta_0 theta_1 x z phi')
-theta = sm.Matrix([theta_0, theta_1])
-q = sm.Matrix([theta_0, theta_1, x, z, phi])
-# Integration variables
-s, d = sm.symbols('s d')
-# Load functions
-f_FK_mid = sm.lambdify((theta,p), pickle.load(open("./generated_functions/fk_mid_fixed", "rb")), "mpmath")
-f_FK_end = sm.lambdify((theta,p), pickle.load(open("./generated_functions/fk_end_fixed", "rb")), "mpmath")
-f_J_mid = sm.lambdify((theta,p), pickle.load(open("./generated_functions/J_mid_fixed", "rb")), "mpmath")
-f_J_end = sm.lambdify((theta,p), pickle.load(open("./generated_functions/J_end_fixed", "rb")), "mpmath")
-f_FK = sm.lambdify((q,p,s,d), pickle.load(open("./generated_functions/fk", "rb")), "mpmath")
-# Convenience functions to extract real floats from complex mpmath matrices
-def eval_fk(q, p_vals, s, d): return np.array(f_FK(q, p_vals, s, d).apply(mp.re).tolist(), dtype=float)
-def eval_midpt(theta, p_vals): return np.array(f_FK_mid(theta, p_vals).apply(mp.re).tolist(), dtype=float)
-def eval_endpt(theta, p_vals): return np.array(f_FK_end(theta, p_vals).apply(mp.re).tolist(), dtype=float)
-def eval_J_midpt(theta, p_vals): return np.array(f_J_mid(theta, p_vals).apply(mp.re).tolist(), dtype=float)
-def eval_J_endpt(theta, p_vals): return np.array(f_J_end(theta, p_vals).apply(mp.re).tolist(), dtype=float)
 
 #%%
 # Data paths
@@ -329,12 +246,12 @@ fk_targets_end = np.vstack([X_end-X,Z_end-Z]).T
 fk_targets = np.hstack([rot_XZ_on_Y(fk_targets_mid,-Phi), rot_XZ_on_Y(fk_targets_end,-Phi)])
 
 theta_extracted = np.zeros((fk_targets.shape[0],2,))
-theta_guess = np.array([-6.384623250815462,11.25180334393975]) # Assume starting hanging straight down
+theta_guess = np.array([-6.384623250815462,11.25180334393975])
 IK_converged = np.zeros((fk_targets.shape[0],1,))
 
 # Iterate IK over data
 for n in range(fk_targets.shape[0]):
-    theta_n, convergence = find_curvature(theta_guess, fk_targets[n,:], 0.005)
+    theta_n, convergence = find_curvature(p_vals, theta_guess, target_evaluators, fk_targets[n,:], 0.005)
     theta_extracted[n,:] = theta_n
     theta_guess = theta_n
     IK_converged[n] = convergence
@@ -392,9 +309,9 @@ with writer.saving(fig, data_dir + '/videos/curvature_anim' + post + '.mp4', 200
             base.set_data([X[i],X[i]+base_vis[0]], [Z[i],Z[i]+base_vis[1]])
         # Draw FK curve
         if in_robot_frame:
-            XZ = get_FK([theta_extracted[i,0],theta_extracted[i,1],X[i],Z[i],Phi[i]],21)
+            XZ = get_FK(p_vals,[theta_extracted[i,0],theta_extracted[i,1],X[i],Z[i],Phi[i]],eval_fk,21)
         else:
-            XZ = get_FK([theta_extracted[i,0],theta_extracted[i,1],0,0,0],21)
+            XZ = get_FK(p_vals,[theta_extracted[i,0],theta_extracted[i,1],0,0,0],eval_fk,21)
         curve.set_color('tab:orange' if IK_converged[i,0] else 'orange')
         curve.set_data(XZ[:,0], XZ[:,1])
         # Draw marker positions
@@ -444,7 +361,7 @@ curve, = plt.plot([], [])
 
 delay = ('_delay' + str(int(cam_delay*1e3))) if cam_delay > 0.0 else ''
 
-with writer.saving(fig, data_dir + '/videos/overlay_anim' + delay + '.mp4', 200):
+with writer.saving(fig, data_dir + '/videos/just_a_test' + delay + '.mp4', 200):
     for idx in range(fk_targets.shape[0]):
         if idx % freq_target == 0:
             print('Generating animation, ' + str(idx/freq_target) + ' of ' + str(t_end) + 's')
@@ -463,7 +380,7 @@ with writer.saving(fig, data_dir + '/videos/overlay_anim' + delay + '.mp4', 200)
         mid.set_offsets([mid_proj[0]/mid_proj[2],mid_proj[1]/mid_proj[2]])
         end.set_offsets([end_proj[0]/end_proj[2],end_proj[1]/end_proj[2]])
         # Extracted FK
-        XZ = get_FK([Theta0[idx],Theta1[idx],X[idx],Z[idx],Phi[idx]],21)
+        XZ = get_FK(p_vals,[Theta0[idx],Theta1[idx],X[idx],Z[idx],Phi[idx]],eval_fk,21)
         curve_XYZ = np.vstack([XZ[:,0],Y_meas*np.ones((XZ.shape[0],)),XZ[:,1],np.ones((XZ.shape[0],))])
         FK_evals = P@curve_XYZ
         curve.set_color('tab:orange')# if IK_converged[idx,0] else 'orange')
@@ -532,7 +449,7 @@ with writer.saving(fig, data_dir + '/videos/sim_overlay_static_ID_90_dyn_ID_full
         img_name = '/' + Img[data_idx] + '.jpg'
         img = cv2.cvtColor(cv2.imread(img_dir + img_name), cv2.COLOR_BGR2RGB)
         image.set_data(img)
-        XZ = get_FK([Theta0_sim[idx],Theta1_sim[idx],X[data_idx],Z[data_idx],Phi[data_idx]],21)
+        XZ = get_FK(p_vals,[Theta0_sim[idx],Theta1_sim[idx],X[data_idx],Z[data_idx],Phi[data_idx]],eval_fk,21)
         curve_XYZ = np.vstack([XZ[:,0],Y_meas*np.ones((XZ.shape[0],)),XZ[:,1],np.ones((XZ.shape[0],))])
         FK_evals = P@curve_XYZ
         curve.set_color('tab:orange')

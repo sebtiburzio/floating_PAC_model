@@ -7,6 +7,8 @@ from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 
 from utils import rot_XZ_on_Y, plot_FK, find_curvature
+from generated_functions.fixed.fixed_base_functions import eval_fk, eval_midpt, eval_endpt, eval_J_midpt, eval_J_endpt
+target_evaluators = [eval_midpt, eval_endpt, eval_J_midpt, eval_J_endpt]
 
 #%%
 # Data paths
@@ -52,7 +54,7 @@ theta_guess = np.array([11,-18]) # For orange cable
 IK_converged = np.zeros((fk_targets.shape[0],1,))
 
 for n in range(fk_targets.shape[0]):
-    theta_n, convergence = find_curvature(p_vals,theta_guess,fk_targets[n,:])
+    theta_n, convergence = find_curvature(p_vals,theta_guess,target_evaluators,fk_targets[n,:])
     theta_extracted[n,:] = theta_n
     theta_guess = theta_n
     IK_converged[n] = convergence
@@ -63,7 +65,7 @@ Theta1 = theta_extracted[:,1]
 # Plot result over fk_targets
 for i in range(len(theta_extracted)):
     print(str(Gamma[i]*180/np.pi) + 'deg')
-    plot_FK(p_vals,theta_extracted[i],fk_targets[i])
+    plot_FK(p_vals,theta_extracted[i],eval_fk,fk_targets[i])
 plt.close()
 
 # %%

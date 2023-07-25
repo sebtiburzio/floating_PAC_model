@@ -56,7 +56,7 @@ q = sm.Matrix([theta_0, theta_1, x, z, phi])
 # Integration variables
 s, d = sm.symbols('s d')
 
-# Load EOM functions, replace constant parameters
+# Load EOM functions, replace constant parameters # TODO - change to loading from module
 F_G = pickle.load(open("./generated_functions/G", "rb"))
 F_B = pickle.load(open("./generated_functions/B", "rb"))
 F_G = F_G.subs([(m_L,p_vals[0]),(m_E,p_vals[1]),(L,p_vals[2]),(D,p_vals[3])])

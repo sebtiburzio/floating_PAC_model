@@ -1,9 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-# TODO - how to make it so common functions can be reused with both fixed and floating base functions?
-from generated_functions.fixed.fixed_base_functions import eval_fk, eval_midpt, eval_endpt, eval_J_midpt, eval_J_endpt
-
 def rot_XZ_on_Y(XZs,angles):
     # HACK - the angles are -ve because R_angles needs to be transposed for einsum to work
     # I don't know how to get einsum to work otherwise
@@ -14,16 +11,16 @@ def rot_XZ_on_Y(XZs,angles):
     else:
         return np.einsum('ijk,ik->ij', R_angles, XZs)
 
-def get_FK(p_vals,q_repl,num_pts=21):
+def get_FK(p_vals,q_repl,f_fk,num_pts=21):
     s_evals = np.linspace(0,1,num_pts)
     FK_evals = np.zeros((s_evals.size,2,1))
     for i_s in range(s_evals.size):
-       FK_evals[i_s] = np.array(eval_fk(q_repl,p_vals,s_evals[i_s],0.0))
+       FK_evals[i_s] = np.array(f_fk(q_repl,p_vals,s_evals[i_s],0.0))
     return FK_evals.squeeze()
 
 # Plot FK based on theta config and optionally an fk target for comparison
-def plot_FK(p_vals,q_repl,fk_targets=None):
-    FK_evals = get_FK(p_vals,q_repl)
+def plot_FK(p_vals,q_repl,f_fk,fk_targets=None):
+    FK_evals = get_FK(p_vals,q_repl,f_fk)
     fig, ax = plt.subplots()
     ax.plot(FK_evals[:,0],FK_evals[:,1],'tab:orange')
     ax.scatter(FK_evals[10,0],FK_evals[10,1],s=2,c='m',zorder=2.5)
@@ -48,10 +45,11 @@ def plot_fk_targets(fk_targets,i):
     plt.axis('equal')
     plt.grid(True)
 
-def find_curvature(p_vals,theta_guess,fk_target,epsilon=0.01,max_iterations=10):  
+# target_evaluators = [eval_midpt, eval_endpt, eval_J_midpt, eval_J_endpt]
+def find_curvature(p_vals,theta_guess,target_evaluators,fk_target,epsilon=0.01,max_iterations=10):  
     error_2norm_last = np.inf
     for i in range(max_iterations):
-        error = (np.vstack([eval_midpt(theta_guess,p_vals), eval_endpt(theta_guess,p_vals)]) - fk_target.reshape(4,1))
+        error = (np.vstack([target_evaluators[0](theta_guess,p_vals), target_evaluators[1](theta_guess,p_vals)]) - fk_target.reshape(4,1))
         error_2norm = np.linalg.norm(error)
         if error_2norm < epsilon:
             print("Converged after " + str(i) + " iterations")
@@ -66,7 +64,7 @@ def find_curvature(p_vals,theta_guess,fk_target,epsilon=0.01,max_iterations=10):
             else:
                 theta_guess_last = theta_guess
                 error_2norm_last = error_2norm
-                J = np.vstack([eval_J_midpt(theta_guess, p_vals), eval_J_endpt(theta_guess, p_vals)])
+                J = np.vstack([target_evaluators[2](theta_guess, p_vals), target_evaluators[3](theta_guess, p_vals)])
                 theta_guess = theta_guess - (np.linalg.pinv(J)@error).squeeze()
     print("Max iterations reached (check why)")
     return theta_guess, False

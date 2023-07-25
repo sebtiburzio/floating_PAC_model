@@ -103,22 +103,22 @@ pickle.dump(C, open("./generated_functions/fixed/C", "wb"))
 E = B*ddtheta + C*dtheta + G
 Y = E.jacobian(sm.Matrix([m_L,m_E]))
 
-pickle.dump(Y, open("./generated_functions/fixed/Y", "wb"))
+pickle.dump(Y, open("./generated_functions/fixed/identification/Y", "wb"))
 
 # %%
 # Factor out m_L for identification
 dE_dmL = E.diff(m_L)
 E_mL_0 = E.subs(m_L,0)
 
-pickle.dump(dE_dmL, open("./generated_functions/fixed/dE_dmL", "wb"))
-pickle.dump(E_mL_0, open("./generated_functions/fixed/E_mL_0", "wb"))
+pickle.dump(dE_dmL, open("./generated_functions/fixed/identification/dE_dmL", "wb"))
+pickle.dump(E_mL_0, open("./generated_functions/fixed/identification/E_mL_0", "wb"))
 
 # %%
 # Factor out m_E for identification
 dE_dmE = E.diff(m_E)
 E_mE_0 = E.subs(m_E,0)
 
-pickle.dump(dE_dmE, open("./generated_functions/fixed/dE_dmE", "wb"))
-pickle.dump(E_mE_0, open("./generated_functions/fixed/E_mE_0", "wb"))
+pickle.dump(dE_dmE, open("./generated_functions/fixed/identification/dE_dmE", "wb"))
+pickle.dump(E_mE_0, open("./generated_functions/fixed/identification/E_mE_0", "wb"))
 
 # %%

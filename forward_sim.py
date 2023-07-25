@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FFMpegWriter
 
 #%%
-# Plotting functions # TODO - separate and import from module instead of defining here and in post_processing?
+# Plotting functions # TODO - change to importing from utils
 def plot_FK(q_repl):
     FK_evals = get_FK(q_repl)
     fig, ax = plt.subplots()
@@ -50,7 +50,7 @@ def f_dyn(t, y, F):
     return np.concatenate((dq, np.linalg.inv(B)@LHS))
 
 #%%
-# Import functions 
+# Import functions # TODO - change to loading from module
 # Constant parameters
 m_L, m_E, L, D = sm.symbols('m_L m_E L D')  # m_L - total mass of cable, m_E - mass of weighted end
 p = sm.Matrix([m_L, m_E, L, D])

@@ -71,7 +71,7 @@ s, d = sm.symbols('s d')
 
 # %%
 # Identify stiffness/damping only
-# Load EOM functions, replace constant parameters
+# Load EOM functions, replace constant parameters # TODO - change to loading from module
 F_G = pickle.load(open("./generated_functions/fixed/G", "rb"))
 F_B = pickle.load(open("./generated_functions/fixed/B", "rb"))
 F_C = pickle.load(open("./generated_functions/fixed/C", "rb"))
