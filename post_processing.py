@@ -72,14 +72,14 @@ def plot_FK(q_repl,i=None):
     ax.grid(True)
     plt.show()
 
-def plot_calib_check(): # TODO - make these work with non-zero Y
+def plot_calib_check():
     img = cv2.cvtColor(cv2.imread(img_dir + '/' + str(ts_markers[0]) + '.jpg'), cv2.COLOR_BGR2RGB)
     fig, ax = plt.subplots()
     ax.imshow(img,alpha=0.5)
-    # End effector measured by robot
+    # End effector measured by robot at first sample
     EE_XYZ = np.array([O_T_EE[0,12],O_T_EE[0,13],O_T_EE[0,14],1.0])
-    EE_X_axis = np.array([O_T_EE[0,12]+0.05,O_T_EE[0,13],O_T_EE[0,14],1.0]) # HACK - only if Phi_meas[0] = 0
-    EE_Z_axis = np.array([O_T_EE[0,12],O_T_EE[0,13],O_T_EE[0,14]-0.05,1.0]) #
+    EE_X_axis = np.array([O_T_EE[0,12]+0.05*np.cos(Phi_meas[0]),O_T_EE[0,13],O_T_EE[0,14]-0.05*np.sin(Phi_meas[0]),1.0])
+    EE_Z_axis = np.array([O_T_EE[0,12]-0.05*np.sin(Phi_meas[0]),O_T_EE[0,13],O_T_EE[0,14]-0.05*np.cos(Phi_meas[0]),1.0])
     EE_proj = P@EE_XYZ
     EE_X_axis_proj = P@EE_X_axis
     EE_Z_axis_proj = P@EE_Z_axis
@@ -185,7 +185,7 @@ def eval_J_endpt(theta, p_vals): return np.array(f_J_end(theta, p_vals).apply(mp
 
 #%%
 # Data paths
-dataset_name = 'black_grid_horiz_RHS'
+dataset_name = 'black_cable/k000100Ton000500Ti003000/black_grid_horiz_LHS'
 data_date = '0724'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 if not os.path.exists(data_dir + '/videos'):
@@ -199,7 +199,7 @@ print('Path: ' + data_dir)
 # Import data
 img_dir = data_dir + '/images'
 # Camera intrinsic and extrinsic transforms
-with np.load(data_dir + '/TFs.npz') as tfs:
+with np.load(data_dir + '/../../../TFs.npz') as tfs:
     P = tfs['P']
     E_base = tfs['E_base']
     E_cam = tfs['E_cam']
@@ -225,12 +225,13 @@ base_offset = 0.0485 # Offset distance of cable attachment point from measured r
 RMat_EE = np.array([[O_T_EE[:,0], O_T_EE[:,1],O_T_EE[:,2]],
                     [O_T_EE[:,4], O_T_EE[:,5],O_T_EE[:,6]],
                     [O_T_EE[:,8], O_T_EE[:,9],O_T_EE[:,10]]]).T
-# Extracting relevant Phi for the model assumes planar motion, nominally on the XZ plane.
+# IMPORTANT : Extracting relevant Phi for the model assumes planar motion, parallel to XZ plane.
 # Expectation is that the natural positon of the EE with Z pointing down and X pointing forward is reached with pi rotation around the robot X axis.
-# The Phi angle of the model is then just the rotation around the robot Y axis. Probably incorrect if there is also rotation around the Z axis.
-RPY_EE = R.from_matrix(RMat_EE).as_euler('xzy', degrees=False)
+# The Phi angle of the model is then just the rotation around the robot Y axis. Doesn't work if there is also rotation around the Z axis.
+RPY_EE = R.from_matrix(RMat_EE).as_euler('xzy', degrees=False) # Extrinsic Roll, Yaw, Pitch parametrisation. x=pi, z=0, y=Phi
 Phi_meas = RPY_EE[:,2]
-plt.plot(RPY_EE)
+plt.plot(RPY_EE) # Worth checking that x=pi, z=0
+plt.legend(['x','z','y'])
 # Move robot EE position to cable attachment point. This also relies on the assumptions above.
 X_meas = O_T_EE[:,12] - base_offset*np.sin(Phi_meas)
 Z_meas = O_T_EE[:,14] - base_offset*np.cos(Phi_meas)
@@ -256,16 +257,6 @@ Ty_meas = W[:,4]
 plot_calib_check()
 
 #%%
-# !!! The fudge zone !!!
-# Static offsets to correct for camera calibration error 
-# TODO - think this is misguided? offsetting real robot position based on bad calibration?
-# Replace with calibration checking/adjustment before experiment
-X_meas = X_meas
-Z_meas = Z_meas - 0.03
-plot_calib_check()
-# !!! Leaving the fudge zone !!!
-
-#%%
 # Trim dead time from beginning and end of data
 fig, axs = plt.subplots(5,1)
 axs[0].plot(ts_markers, X_end_meas)
@@ -280,7 +271,7 @@ fig.suptitle('X_end, Z_end, Phi, Fx, Fz, Ty')
 # Change these referring to plot, or skip to use full set of available data
 ts_begin = 4.9e11 + 1.690194e18 
 ts_end = 6.1e11 + 1.690194e18
-cam_delay = 0.03 # Difference between timestamps of first movement visible in camera and robot state data. Usually 0.03s is close enough.
+cam_delay = 0.0 # Difference between timestamps of first movement visible in camera and robot state data. Usually 0.03s is close enough.
 
 #%%
 # Convert absolute ROS timestamps to relative seconds
