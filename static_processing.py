@@ -12,33 +12,24 @@ target_evaluators = [eval_midpt, eval_endpt, eval_J_midpt, eval_J_endpt]
 
 #%%
 # Data paths
-dataset_name = 'orange_weighted_combined'
-data_date = '0714'
+dataset_name = 'orange_short_weighted_equilibria'
+data_date = '0802'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 
 print('Dataset: ' + dataset_name)
 print('Date: ' + data_date)
 print('Path: ' + data_dir)
 
-markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows=1, usecols=range(1,7))
-O_T_EE = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1, usecols=range(1,17))
-RMat_EE = np.array([[O_T_EE[:,0], O_T_EE[:,1],O_T_EE[:,2]],
-                    [O_T_EE[:,4], O_T_EE[:,5],O_T_EE[:,6]],
-                    [O_T_EE[:,8], O_T_EE[:,9],O_T_EE[:,10]]]).T
-# Expect orientation to be pi around x axis then phi around y axis
-RPY_EE = R.from_matrix(RMat_EE).as_euler('xzy', degrees=False)
-Gamma = RPY_EE[:,2] # Note this is the rotated angle of the robot - simulated gravity direction would be -ve this
-plt.plot(Gamma) # Check the RPY conversion worked
+data = np.loadtxt(data_dir + '/sequence_results.csv', delimiter=',', skiprows=1)
+Gamma = data[:,1]
+X_base_meas = data[:,2]
+Z_base_meas = data[:,3]
+X_mid_meas = data[:,4]
+Z_mid_meas = data[:,5]
+X_end_meas = data[:,6]
+Z_end_meas = data[:,7]
 
-# Import marker positions
-X_base_meas = markers[:,0]
-Z_base_meas = markers[:,1]
-X_mid_meas = markers[:,2]
-Z_mid_meas = markers[:,3]
-X_end_meas = markers[:,4]
-Z_end_meas = markers[:,5]
-
-p_vals = [0.4, 0.23, 0.75, 0.015] # cable properties: mass (length), mass (end), length, diameter
+p_vals = [0.25, 0.23, 0.45, 0.015] # cable properties: mass (length), mass (end), length, diameter
 
 #%%
 # Transform marker points to fixed PAC frame (subtract X/Z, rotate back phi)
@@ -49,14 +40,13 @@ fk_targets = np.hstack([rot_XZ_on_Y(fk_targets_mid,-Gamma), rot_XZ_on_Y(fk_targe
 #%%
 # Iterate IK over data
 theta_extracted = np.zeros((fk_targets.shape[0],2,))
-# theta_guess = np.array([8.5,-12.2]) # For black cable
-theta_guess = np.array([11,-18]) # For orange cable
+theta_guess = np.array([1e-3,1e-3]) # Assuming first point angle 0
 IK_converged = np.zeros((fk_targets.shape[0],1,))
 
 for n in range(fk_targets.shape[0]):
     theta_n, convergence = find_curvature(p_vals,theta_guess,target_evaluators,fk_targets[n,:])
     theta_extracted[n,:] = theta_n
-    theta_guess = theta_n
+    theta_guess = theta_n if n == 0 else theta_extracted[n-1,:] # HACK - assumes angles ordered and alternating +ve -ve
     IK_converged[n] = convergence
 Theta0 = theta_extracted[:,0]
 Theta1 = theta_extracted[:,1]
