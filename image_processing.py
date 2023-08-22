@@ -112,9 +112,9 @@ def UV_to_XZplane(u,v,Y=0):
     return sol[:3]
 
 #%%
-# Paths
-dataset_name = 'black_grid_horiz_RHS'
-data_date = '0724'
+# Paths 
+dataset_name = 'black_short_weighted_swing'
+data_date = '0801'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 
 print('Dataset: ' + dataset_name)
@@ -123,7 +123,7 @@ print('Path: ' + data_dir)
 
 #%%
 # Camera intrinsic and extrinsic transforms
-with np.load(data_dir + '/TFs_adj.npz') as tfs:
+with np.load(data_dir + '/../TFs_adj.npz') as tfs:
     P = tfs['P']
     E_base = tfs['E_base']
     E_cam = tfs['E_cam']
@@ -192,17 +192,17 @@ mid_no_detection = []
 end_no_detection = []
 
 # Mask range for markers
-lower_R = np.array([0,80,50])
+lower_R = np.array([0,50,50])
 upper_R = np.array([10,255,255])
-lower_G = np.array([28,50,50])
+lower_G = np.array([25,40,50])
 upper_G = np.array([70,255,255])
-lower_B = np.array([90,100,60])
+lower_B = np.array([90,50,60])
 upper_B = np.array([120,255,255])
 
-# Estimate starting positions
-base_pos_px = np.array([975,1030])
-mid_pos_px = np.array([1000,500])
-end_pos_px = np.array([975,900])
+# Estimate starting positions 
+base_pos_px = np.array([150,1000]) # (v,u) / (row,col)
+mid_pos_px = np.array([375,1075])
+end_pos_px = np.array([625,1225])
 
 count = 0
 test_max = 1e9
@@ -255,7 +255,6 @@ for img_name in imgs:
 
     # Locate markers at COM of mask contours - if multiple contours choose the closest to previous position
     # TODO - if marker crosses another contour it can switch and not recover
-    # TODO - contour COM seems to have slightly more noise than mask COM, should be possible to get equivalent results but maybe not worth looking into
     # R
     if np.any(np.isnan(center_of_mass(mask_R))):
         base_no_detection.append(count)
@@ -264,7 +263,10 @@ for img_name in imgs:
         contours_R, _ = cv2.findContours(mask_R, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         contour_COMs = []
         for c in contours_R:
-            contour_COMs.append(np.mean(c.squeeze(),axis=0))
+            M = cv2.moments(c)
+            cu = int(M['m10']/M['m00'])
+            cv = int(M['m01']/M['m00'])
+            contour_COMs.append(np.array([cu,cv]))
         contour_COMs = np.array([np.array(contour_COMs)[:,1],np.array(contour_COMs)[:,0]]).T # Contours are [x,y] not [row,col]
         base_pos_px =  contour_COMs[np.argmin(np.linalg.norm(base_pos_px-contour_COMs,axis=1))]
     # G
@@ -275,7 +277,10 @@ for img_name in imgs:
         contours_G, _ = cv2.findContours(mask_G, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         contour_COMs = []
         for c in contours_G:
-            contour_COMs.append(np.mean(c.squeeze(),axis=0))
+            M = cv2.moments(c)
+            cu = int(M['m10']/M['m00'])
+            cv = int(M['m01']/M['m00'])
+            contour_COMs.append(np.array([cu,cv]))
         contour_COMs = np.array([np.array(contour_COMs)[:,1],np.array(contour_COMs)[:,0]]).T
         mid_pos_px = contour_COMs[np.argmin(np.linalg.norm(mid_pos_px-contour_COMs,axis=1))]
     # B
@@ -286,7 +291,10 @@ for img_name in imgs:
         contours_B, _ = cv2.findContours(mask_B, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         contour_COMs = []
         for c in contours_B:
-            contour_COMs.append(np.mean(c.squeeze(),axis=0))
+            M = cv2.moments(c)
+            cu = int(M['m10']/M['m00'])
+            cv = int(M['m01']/M['m00'])
+            contour_COMs.append(np.array([cu,cv]))
         contour_COMs = np.array([np.array(contour_COMs)[:,1],np.array(contour_COMs)[:,0]]).T
         end_pos_px = contour_COMs[np.argmin(np.linalg.norm(end_pos_px-contour_COMs,axis=1))]
 
