@@ -9,10 +9,10 @@ from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 from matplotlib.animation import FFMpegWriter
 
-from utils import rot_XZ_on_Y, get_FK, find_curvature
 from generated_functions.floating.floating_base_functions import eval_fk
 from generated_functions.fixed.fixed_base_functions import eval_midpt, eval_endpt, eval_J_midpt, eval_J_endpt
 target_evaluators = [eval_midpt, eval_endpt, eval_J_midpt, eval_J_endpt]
+from utils import rot_XZ_on_Y, get_FK, find_curvature
 
 #%%
 # For plotting multiple data in a normalised time window
@@ -82,18 +82,18 @@ def plot_on_image(idx):
     _, ax = plt.subplots()
     ax.imshow(img,alpha=0.5)
     # Base and marker positions
-    base_XYZ = np.array([X[idx],0.0,Z[idx],1.0])
+    base_XYZ = np.array([X[idx],Y_meas,Z[idx],1.0])
     base_proj = P@base_XYZ
-    mid_XYZ = np.array([X_mid[idx],0.0,Z_mid[idx],1.0])
+    mid_XYZ = np.array([X_mid[idx],Y_meas,Z_mid[idx],1.0])
     mid_proj = P@mid_XYZ
-    end_XYZ = np.array([X_end[idx],0.0,Z_end[idx],1.0])
+    end_XYZ = np.array([X_end[idx],Y_meas,Z_end[idx],1.0])
     end_proj = P@end_XYZ
     ax.scatter(base_proj[0]/base_proj[2],base_proj[1]/base_proj[2],s=2,c='tab:red',zorder=2.5)
     ax.scatter(mid_proj[0]/mid_proj[2],mid_proj[1]/mid_proj[2],s=2,c='tab:green',zorder=2.5)
     ax.scatter(end_proj[0]/end_proj[2],end_proj[1]/end_proj[2],s=2,c='tab:blue',zorder=2.5)
     # Extracted FK
     XZ = get_FK(p_vals,[theta_extracted[idx,0],theta_extracted[idx,1],X[idx],Z[idx],Phi[idx]],eval_fk,21)
-    curve_XYZ = np.vstack([XZ[:,0],np.zeros((XZ.shape[0],)),XZ[:,1],np.ones((XZ.shape[0],))])
+    curve_XYZ = np.vstack([XZ[:,0],Y_meas*np.ones((XZ.shape[0],)),XZ[:,1],np.ones((XZ.shape[0],))])
     FK_evals = P@curve_XYZ
     ax.plot(FK_evals[0]/FK_evals[2],FK_evals[1]/FK_evals[2],c='tab:orange' if IK_converged[idx] else 'orange')
     ax.scatter(FK_evals[0,10]/FK_evals[2,10],FK_evals[1,10]/FK_evals[2,10],s=2,c='m',zorder=2.5)
@@ -102,8 +102,8 @@ def plot_on_image(idx):
 
 #%%
 # Data paths
-dataset_name = 'black_cable/k000100Ton000500Ti003000/black_grid_horiz_LHS'
-data_date = '0724'
+dataset_name = 'orange_short_weighted_swing'
+data_date = '0801'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 if not os.path.exists(data_dir + '/videos'):
             os.makedirs(data_dir + '/videos')
@@ -116,7 +116,7 @@ print('Path: ' + data_dir)
 # Import data
 img_dir = data_dir + '/images'
 # Camera intrinsic and extrinsic transforms
-with np.load(data_dir + '/../../../TFs.npz') as tfs:
+with np.load(data_dir + '/../TFs_adj.npz') as tfs:
     P = tfs['P']
     E_base = tfs['E_base']
     E_cam = tfs['E_cam']
@@ -124,18 +124,24 @@ with np.load(data_dir + '/../../../TFs.npz') as tfs:
 # Timestamps
 ts_OTEE = np.loadtxt(data_dir + '/EE_pose.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
 ts_markers = np.loadtxt(data_dir + '/marker_positions.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
-ts_W = np.loadtxt(data_dir + '/EE_wrench.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
+
+# ts_W = np.loadtxt(data_dir + '/EE_wrench.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
+ts_W = np.array([ts_OTEE[0],ts_OTEE[-1]])
+
 ts_begin = np.max([np.min(ts_OTEE), np.min(ts_markers), np.min(ts_W)])
 ts_end = np.min([np.max(ts_OTEE), np.max(ts_markers), np.max(ts_W)])
 cam_delay = 0.0
 # Measurements
 O_T_EE = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1, usecols=range(1,17))
 markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows=1, usecols=range(1,10))
-W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=range(1,7))
+
+# W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=range(1,7))
+W = np.array([[0,0,0,0,0,0],[0,0,0,0,0,0]])
 
 # Physical definitions for object set up
-p_vals = [0.6, 0.23, 0.6, 0.02] # cable properties: mass (length), mass (end), length, diameter
-base_offset = 0.0485 # Offset distance of cable attachment point from measured robot EE frame (in EE frame)
+print("REMEMBER TO SET THE OBJECT PROPERTIES!!!")
+p_vals = [0.25, 0.23, 0.45, 0.015] # cable properties: mass (length), mass (end), length, diameter
+base_offset = 0.015 # Offset distance of cable attachment point from measured robot EE frame (in EE frame)
 
 # Copy relevant planar data
 # Base position and orientation from robot state
@@ -175,19 +181,19 @@ plot_calib_check()
 
 #%%
 # Trim dead time from beginning and end of data
-fig, axs = plt.subplots(5,1)
+fig, axs = plt.subplots(2,1)
 axs[0].plot(ts_markers, X_end_meas)
 axs[1].plot(ts_markers, Z_end_meas)
-axs[2].plot(ts_W, Fx_meas)
-axs[3].plot(ts_W, Fz_meas)
-axs[4].plot(ts_W, Ty_meas)
+# axs[2].plot(ts_W, Fx_meas)
+# axs[3].plot(ts_W, Fz_meas)
+# axs[4].plot(ts_W, Ty_meas)
 axs[-1].minorticks_on()
 fig.suptitle('X_end, Z_end, Phi, Fx, Fz, Ty')
 
 #%%
 # Change these referring to plot, or skip to use full set of available data
-ts_begin = 4.9e11 + 1.690194e18 
-ts_end = 6.1e11 + 1.690194e18
+ts_begin = 6.55e11 + 1.690213e18 
+ts_end = 7.7e11 + 1.690213e18
 cam_delay = 0.0 # Difference between timestamps of first movement visible in camera and robot state data. Usually 0.03s is close enough.
 
 #%%
@@ -215,7 +221,7 @@ Ty_robot = T_robot[:,1] # TODO - Adjust F/T meas due to offset from FT frame?'
 
 #%%
 # Interpolate to uniform sample times
-freq_target = 6
+freq_target = 30
 t_target = np.arange(0, t_end, 1/freq_target)
 X = np.interp(t_target, t_OTEE, X_meas)
 Z = np.interp(t_target, t_OTEE, Z_meas)
@@ -246,7 +252,7 @@ fk_targets_end = np.vstack([X_end-X,Z_end-Z]).T
 fk_targets = np.hstack([rot_XZ_on_Y(fk_targets_mid,-Phi), rot_XZ_on_Y(fk_targets_end,-Phi)])
 
 theta_extracted = np.zeros((fk_targets.shape[0],2,))
-theta_guess = np.array([-6.384623250815462,11.25180334393975])
+theta_guess = np.array([-1,1e-3])
 IK_converged = np.zeros((fk_targets.shape[0],1,))
 
 # Iterate IK over data
@@ -296,7 +302,7 @@ ax.set_aspect('equal')
 ax.grid(True)
 
 draw_FT = False
-in_robot_frame = False
+in_robot_frame = True
 post = '_robot' if in_robot_frame else ''
 
 with writer.saving(fig, data_dir + '/videos/curvature_anim' + post + '.mp4', 200):
@@ -361,7 +367,7 @@ curve, = plt.plot([], [])
 
 delay = ('_delay' + str(int(cam_delay*1e3))) if cam_delay > 0.0 else ''
 
-with writer.saving(fig, data_dir + '/videos/just_a_test' + delay + '.mp4', 200):
+with writer.saving(fig, data_dir + '/videos/overlay_anim' + delay + '.mp4', 200):
     for idx in range(fk_targets.shape[0]):
         if idx % freq_target == 0:
             print('Generating animation, ' + str(idx/freq_target) + ' of ' + str(t_end) + 's')
@@ -411,16 +417,26 @@ with open(data_dir + '/data_out/theta_evolution.csv', 'w', newline='') as csvfil
                          Theta0[n], Theta1[n],
                          dTheta0[n], dTheta1[n],
                          ddTheta0[n], ddTheta1[n]])
-with open(data_dir + '/data_out/theta_equilibria.csv', 'w', newline='') as csvfile:
+with open(data_dir + '/data_out/state_evolution.csv', 'w', newline='') as csvfile:
     writer = csv.writer(csvfile, delimiter=',')
-    writer.writerow(['Gamma', 'Theta0', 'Theta1', 'X_mid', 'Z_mid', 'X_end', 'Z_end'])
+    writer.writerow(['ts', 'X', 'Z', 'Phi', 'Theta0', 'Theta1', 'dX', 'dZ', 'dPhi', 'dTheta0', 'dTheta1', 'ddX', 'ddZ', 'ddPhi', 'ddTheta0', 'ddTheta1'])
     for n in range(len(t_target)):
-        writer.writerow([Phi[n], Theta0[n], Theta1[n], 
-                        fk_targets[n,0], fk_targets[n,1], 
-                        fk_targets[n,2], fk_targets[n,3]])
+        writer.writerow([t_target[n], 
+                            X[n], Z[n], Phi[n], Theta0[n], Theta1[n], 
+                            dX[n], dZ[n], dPhi[n], dTheta0[n], dTheta1[n], 
+                            ddX[n], ddZ[n], ddPhi[n], ddTheta0[n], ddTheta1[n]])
+# # Only relevant for quasi static experiments
+# with open(data_dir + '/data_out/theta_equilibria.csv', 'w', newline='') as csvfile:
+#     writer = csv.writer(csvfile, delimiter=',')
+#     writer.writerow(['Gamma', 'Theta0', 'Theta1', 'X_mid', 'Z_mid', 'X_end', 'Z_end'])
+#     for n in range(len(t_target)):
+#         writer.writerow([Phi[n], Theta0[n], Theta1[n], 
+#                         fk_targets[n,0], fk_targets[n,1], 
+#                         fk_targets[n,2], fk_targets[n,3]])
+
         
 #%% Load matlab data
-sim_data = np.loadtxt(data_dir + '/data_in/scale_B/black_swing_sim_k078_b0455_BC16536_off_n745_562.csv', dtype=np.float64, delimiter=',')
+sim_data = np.loadtxt(data_dir + '/data_in/orange_weighted_swing_sim_B2.csv', dtype=np.float64, delimiter=',')
 t_sim = sim_data[:,0]
 Theta0_sim = sim_data[:,1]
 Theta1_sim = sim_data[:,2]
@@ -440,7 +456,7 @@ mid = plt.scatter([], [], s=2, c='tab:green',zorder=2.5)
 end = plt.scatter([], [], s=2, c='tab:blue',zorder=2.5)
 curve, = plt.plot([], [])
 
-with writer.saving(fig, data_dir + '/videos/sim_overlay_static_ID_90_dyn_ID_full_data' + '.mp4', 200):
+with writer.saving(fig, data_dir + '/videos/sim_overlay_B2' + '.mp4', 200):
     for idx in range(t_sim.shape[0]):
         if idx % freq_target == 0:
             print('Generating animation, ' + str(idx/freq_target) + ' of ' + str(t_sim.shape[0]/freq_target) + 's')
