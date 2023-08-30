@@ -72,8 +72,8 @@ def UV_to_XZplane(u,v,Y=0):
 
 #%%
 # Paths 
-dataset_name = 'black_short_weighted_swing'
-data_date = '0801'
+dataset_name = 'black_weighted_control'
+data_date = '0829'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 
 print('Dataset: ' + dataset_name)
@@ -92,7 +92,7 @@ with np.load(data_dir + '/../TFs_adj.npz') as tfs:
 # Get img list and display first with grid
 img_dir = data_dir + '/images/'
 imgs = os.listdir(img_dir)
-#imgs.sort()
+imgs.sort()
 # Plot initial EE location to check camera calibration
 EE_start_XYZ = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1, max_rows=1, usecols=range(13,17))
 EE_start_px = P@EE_start_XYZ
@@ -102,16 +102,18 @@ plotim(0,True)
 
 #%%
 # Set Y positions of markers
-base_Y = EE_start_XYZ[1] - 0.01
-mid_Y = EE_start_XYZ[1] - 0.01
-end_Y = EE_start_XYZ[1] - 0.015
+base_Y = -0.2-0.01#EE_start_XYZ[1] - 0.01
+mid_Y = -0.2-0.01#EE_start_XYZ[1] - 0.01
+end_Y = -0.2-0.015#EE_start_XYZ[1] - 0.015
 print("Assuming base at Y=" + str(base_Y))
 print("Assuming mid at Y=" + str(mid_Y))
 print("Assuming end at Y=" + str(end_Y))
 #%%
 
+plt.switch_backend('Qt4Agg')
+
 data = np.loadtxt(data_dir + '/sequence_experiment.csv', delimiter=',', skiprows=1)
-ts = data[:,0]
+ts = np.loadtxt(data_dir + '/sequence_experiment.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
 
 X_base_meas = []
 Z_base_meas = []
@@ -135,9 +137,10 @@ X_ang_end = []
 Z_ang_end = []
 Base_angle = []
 
-for i in range(len(ts)):
+count = 0
+for img_name in imgs:
     fig, ax = plt.subplots(figsize=(16, 12))
-    ax.imshow(img_dir + str(ts) + '.jpg')
+    ax.imshow(cv2.imread(img_dir + img_name))
     plt.axis('off')
     UVs = plt.ginput(n=-1, timeout=0)
     plt.close()
@@ -182,6 +185,10 @@ for i in range(len(ts)):
     Z_ang_end.append(base_ang_end_XZ[2,0])
     Base_angle.append(base_ang)
 
+    count += 1
+    if count > 3:
+        break
+
 with open('./sequence_results.csv', 'w', newline='') as csvfile:
     writer = csv.writer(csvfile, delimiter=',')
     writer.writerow(['ts', 'X_EE', 'Y_EE', 'Z_EE', 'Phi', 
@@ -192,10 +199,11 @@ with open('./sequence_results.csv', 'w', newline='') as csvfile:
                         'U_ang_start', 'V_ang_start', 'U_ang_end', 'V_ang_end',
                         'Goal_X', 'Goal_Z', 'Endpt_Sol_X', 'Endpt_Sol_Z'])
     for n in range(len(ts)):
-        writer.writerow([ts[n], data[n,1], data[n,2], data[n,3], data[n,4],
+        writer.writerow([imgs[n], data[n,1], data[n,2], data[n,3], data[n,4],
                             X_base_meas[n], Z_base_meas[n], X_mid_meas[n], Z_mid_meas[n], X_end_meas[n], Z_end_meas[n],
                             U_base[n], V_base[n], U_mid[n], V_mid[n], U_end[n], V_end[n],
                             Base_angle[n], 
                             X_ang_start[n], Z_ang_start[n], X_ang_end[n], Z_ang_end[n],
                             U_ang_start[n], V_ang_start[n], U_ang_end[n], V_ang_end[n],
                             data[n,5], data[n,6], data[n,7], data[n,8]])
+# %%
