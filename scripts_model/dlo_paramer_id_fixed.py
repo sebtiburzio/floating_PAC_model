@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 # Data paths
 dataset_name = 'black_swing'
 data_date = '0609'
-data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name  # TODO different in image_processing (extra '/' on end), maybe make same?
+data_dir = os.getcwd() + '../paramID_data/' + data_date + '/' + dataset_name  # TODO different in image_processing (extra '/' on end), maybe make same?
 
 print('Dataset: ' + dataset_name)
 print('Date: ' + data_date)

@@ -47,7 +47,7 @@ fk = fk + D*rot_alpha@sm.Matrix([0, d])
 toc = time.perf_counter()
 print("FK gen time: " + str(toc-tic))
 
-pickle.dump(fk, open("./generated_functions/fixed/fk", "wb"))
+pickle.dump(fk, open("../generated_functions/fixed/fk", "wb"))
 f_FK = sm.lambdify((theta,p,s,d), fk, "mpmath")
 
 #%% 
@@ -65,7 +65,7 @@ G = sm.Matrix([9.81*(U)]).jacobian(theta).T
 toc = time.perf_counter()
 print("G gen time: " + str(toc-tic))
 
-pickle.dump(G, open("./generated_functions/fixed/G", "wb"))
+pickle.dump(G, open("../generated_functions/fixed/G", "wb"))
 
 #%% 
 # Inertia matrix
@@ -80,7 +80,7 @@ for i in range(num_masses):
 toc = time.perf_counter()
 print("B gen time: " + str(toc-tic))
 
-pickle.dump(B, open("./generated_functions/fixed/B", "wb"))
+pickle.dump(B, open("../generated_functions/fixed/B", "wb"))
 
 #%%
 # Centrifugal/Coriolis matrix
@@ -96,29 +96,29 @@ for i in range(2):
 toc = time.perf_counter()
 print("C gen time: " + str(toc-tic))
 
-pickle.dump(C, open("./generated_functions/fixed/C", "wb"))
+pickle.dump(C, open("../generated_functions/fixed/C", "wb"))
 
 # %%
 # Linear factorisation by masses
 E = B*ddtheta + C*dtheta + G
 Y = E.jacobian(sm.Matrix([m_L,m_E]))
 
-pickle.dump(Y, open("./generated_functions/fixed/identification/Y", "wb"))
+pickle.dump(Y, open("../generated_functions/fixed/identification/Y", "wb"))
 
 # %%
 # Factor out m_L for identification
 dE_dmL = E.diff(m_L)
 E_mL_0 = E.subs(m_L,0)
 
-pickle.dump(dE_dmL, open("./generated_functions/fixed/identification/dE_dmL", "wb"))
-pickle.dump(E_mL_0, open("./generated_functions/fixed/identification/E_mL_0", "wb"))
+pickle.dump(dE_dmL, open("../generated_functions/fixed/identification/dE_dmL", "wb"))
+pickle.dump(E_mL_0, open("../generated_functions/fixed/identification/E_mL_0", "wb"))
 
 # %%
 # Factor out m_E for identification
 dE_dmE = E.diff(m_E)
 E_mE_0 = E.subs(m_E,0)
 
-pickle.dump(dE_dmE, open("./generated_functions/fixed/identification/dE_dmE", "wb"))
-pickle.dump(E_mE_0, open("./generated_functions/fixed/identification/E_mE_0", "wb"))
+pickle.dump(dE_dmE, open("../generated_functions/fixed/identification/dE_dmE", "wb"))
+pickle.dump(E_mE_0, open("../generated_functions/fixed/identification/E_mE_0", "wb"))
 
 # %%

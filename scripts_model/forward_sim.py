@@ -62,11 +62,11 @@ q = sm.Matrix([theta_0, theta_1, x, z, phi])
 s, d = sm.symbols('s d')
 
 # Load forward kinematics
-f_FK = sm.lambdify((q,p,s,d), pickle.load(open("./generated_functions/fk", "rb")), "mpmath")
+f_FK = sm.lambdify((q,p,s,d), pickle.load(open("../generated_functions/fixed/fk", "rb")), "mpmath")
 # Load EOM functions, replace constant parameters
 p_vals = [1.0, 0.5, 1.0, 0.1]
-F_G = pickle.load(open("./generated_functions/G", "rb"))
-F_B = pickle.load(open("./generated_functions/B", "rb"))
+F_G = pickle.load(open("../generated_functions/fixed/G", "rb"))
+F_B = pickle.load(open("../generated_functions/fixed/B", "rb"))
 F_G = F_G.subs([(m_L,p_vals[0]),(m_E,p_vals[1]),(L,p_vals[2]),(D,p_vals[3])])
 F_B = F_B.subs([(m_L,p_vals[0]),(m_E,p_vals[1]),(L,p_vals[2]),(D,p_vals[3])])
 f_G = sm.lambdify(q, F_G, "mpmath")
@@ -133,7 +133,7 @@ ax.set_aspect('equal')
 ax.grid(True)
 
 writer = FFMpegWriter(fps=FPS)
-with writer.saving(fig, './sim_videos/' + 'test.mp4', 200):
+with writer.saving(fig, '../sim_videos/' + 'test.mp4', 200):
     for frame in range(t_reg.size-1):
         FK_evals = get_FK(q_reg[frame,:])
         curve.set_data(FK_evals[:,0], FK_evals[:,1])

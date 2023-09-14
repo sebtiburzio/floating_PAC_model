@@ -55,11 +55,11 @@ fk = sm.Matrix([x, z]) + rot_phi@(fk + D*rot_alpha@sm.Matrix([0, d]))
 toc = time.perf_counter()
 print("FK gen time: " + str(toc-tic))
 
-pickle.dump(fk, open("./generated_functions/floating/fk", "wb"))
-pickle.dump(fk_mid_fixed, open("./generated_functions/fixed/fk_mid_fixed", "wb"))
-pickle.dump(fk_end_fixed, open("./generated_functions/fixed/fk_end_fixed", "wb"))
-pickle.dump(J_mid_fixed, open("./generated_functions/fixed/J_mid_fixed", "wb"))
-pickle.dump(J_end_fixed, open("./generated_functions/fixed/J_end_fixed", "wb"))
+pickle.dump(fk, open("../generated_functions/floating/fk", "wb"))
+pickle.dump(fk_mid_fixed, open("../generated_functions/fixed/fk_mid_fixed", "wb"))
+pickle.dump(fk_end_fixed, open("../generated_functions/fixed/fk_end_fixed", "wb"))
+pickle.dump(J_mid_fixed, open("../generated_functions/fixed/J_mid_fixed", "wb"))
+pickle.dump(J_end_fixed, open("../generated_functions/fixed/J_end_fixed", "wb"))
 f_FK = sm.lambdify((q,p,s,d), fk, "mpmath")
 f_FK_mf = sm.lambdify((theta,p), fk_mid_fixed, "mpmath")
 f_FK_ef = sm.lambdify((theta,p), fk_end_fixed, "mpmath")
@@ -81,7 +81,7 @@ G = sm.Matrix([9.81*(U)]).jacobian(q)
 toc = time.perf_counter()
 print("G gen time: " + str(toc-tic))
 
-pickle.dump(G, open("./generated_functions/floating/G", "wb"))
+pickle.dump(G, open("../generated_functions/floating/G", "wb"))
 f_G = sm.lambdify((q,p), G, "mpmath")
 
 #%% 
@@ -97,7 +97,7 @@ for i in range(num_masses):
 toc = time.perf_counter()
 print("B gen time: " + str(toc-tic))
 
-pickle.dump(B, open("./generated_functions/floating/B", "wb"))
+pickle.dump(B, open("../generated_functions/floating/B", "wb"))
 f_B = sm.lambdify((q,p), B, "mpmath")
 
 #%% 
@@ -114,5 +114,5 @@ f_B = sm.lambdify((q,p), B, "mpmath")
 # toc = time.perf_counter()
 # print("C gen time: " + str(toc-tic))
 
-# pickle.dump(C, open("./generated_functions/floating/C", "wb"))
+# pickle.dump(C, open("../generated_functions/floating/C", "wb"))
 # f_C = sm.lambdify((q,p,dq), C, "mpmath")
