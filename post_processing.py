@@ -102,8 +102,8 @@ def plot_on_image(idx):
 
 #%%
 # Data paths
-dataset_name = 'orange_short_weighted_swing'
-data_date = '0801'
+dataset_name = 'black_weighted'
+data_date = '1309'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 if not os.path.exists(data_dir + '/videos'):
             os.makedirs(data_dir + '/videos')
@@ -124,24 +124,21 @@ with np.load(data_dir + '/../TFs_adj.npz') as tfs:
 # Timestamps
 ts_OTEE = np.loadtxt(data_dir + '/EE_pose.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
 ts_markers = np.loadtxt(data_dir + '/marker_positions.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
-
-# ts_W = np.loadtxt(data_dir + '/EE_wrench.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
-ts_W = np.array([ts_OTEE[0],ts_OTEE[-1]])
-
+ts_W = np.loadtxt(data_dir + '/EE_wrench.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
+# ts_W = np.array([ts_OTEE[0],ts_OTEE[-1]]) # Switch to this if no FT data
 ts_begin = np.max([np.min(ts_OTEE), np.min(ts_markers), np.min(ts_W)])
 ts_end = np.min([np.max(ts_OTEE), np.max(ts_markers), np.max(ts_W)])
 cam_delay = 0.0
 # Measurements
 O_T_EE = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1, usecols=range(1,17))
 markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows=1, usecols=range(1,10))
-
-# W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=range(1,7))
-W = np.array([[0,0,0,0,0,0],[0,0,0,0,0,0]])
+W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=range(1,7))
+# W = np.array([[0,0,0,0,0,0],[0,0,0,0,0,0]]) # Switch to this if no FT data
 
 # Physical definitions for object set up
 print("REMEMBER TO SET THE OBJECT PROPERTIES!!!")
-p_vals = [0.25, 0.23, 0.45, 0.015] # cable properties: mass (length), mass (end), length, diameter
-base_offset = 0.015 # Offset distance of cable attachment point from measured robot EE frame (in EE frame)
+p_vals = [0.6,0.23,0.6,0.02] # cable properties: mass (length), mass (end), length, diameter # TODO load these like in matlab
+base_offset = 0.0485 # Offset distance of cable attachment point from measured robot EE frame (in EE frame)
 
 # Copy relevant planar data
 # Base position and orientation from robot state
@@ -181,20 +178,20 @@ plot_calib_check()
 
 #%%
 # Trim dead time from beginning and end of data
-fig, axs = plt.subplots(2,1)
+fig, axs = plt.subplots(5,1)
 axs[0].plot(ts_markers, X_end_meas)
 axs[1].plot(ts_markers, Z_end_meas)
-# axs[2].plot(ts_W, Fx_meas)
-# axs[3].plot(ts_W, Fz_meas)
-# axs[4].plot(ts_W, Ty_meas)
+axs[2].plot(ts_W, Fx_meas)
+axs[3].plot(ts_W, Fz_meas)
+axs[4].plot(ts_W, Ty_meas)
 axs[-1].minorticks_on()
 fig.suptitle('X_end, Z_end, Phi, Fx, Fz, Ty')
 
 #%%
 # Change these referring to plot, or skip to use full set of available data
-ts_begin = 6.55e11 + 1.690213e18 
-ts_end = 7.7e11 + 1.690213e18
-cam_delay = 0.0 # Difference between timestamps of first movement visible in camera and robot state data. Usually 0.03s is close enough.
+ts_begin = 3.6e10 + 1.6946175e18 
+ts_end = 4.6e10 + 1.6946175e18
+cam_delay = 0.06 # Difference between timestamps of first movement visible in camera and robot state data. Usually 0.03-0.06s
 
 #%%
 # Convert absolute ROS timestamps to relative seconds
@@ -241,6 +238,7 @@ Img = np.array([ts_markers[i] for i in idxs], dtype=str)
 
 #%%
 # Optionally take the object base position from the extracted marker instead of robot state
+# Can look better if the calibration is off. However it hides any delay in the camera frames
 X = X_base
 Z = Z_base
 
@@ -252,7 +250,7 @@ fk_targets_end = np.vstack([X_end-X,Z_end-Z]).T
 fk_targets = np.hstack([rot_XZ_on_Y(fk_targets_mid,-Phi), rot_XZ_on_Y(fk_targets_end,-Phi)])
 
 theta_extracted = np.zeros((fk_targets.shape[0],2,))
-theta_guess = np.array([-1,1e-3])
+theta_guess = np.array([1e-3,1e-3])
 IK_converged = np.zeros((fk_targets.shape[0],1,))
 
 # Iterate IK over data
@@ -394,6 +392,12 @@ with writer.saving(fig, data_dir + '/videos/overlay_anim' + delay + '.mp4', 200)
 
         writer.grab_frame()
 
+        # # For saving individual frames instead
+        # if idx % 2 == 0:
+        #     if not os.path.exists(data_dir + '/stills/overlay'):
+        #         os.makedirs(data_dir + '/stills/overlay')
+        #     plt.savefig(data_dir + '/stills/overlay/' + str(idx) + '.png', bbox_inches='tight', pad_inches=0.1)
+
     print("Finished")
     plt.close(fig)
 
@@ -436,7 +440,7 @@ with open(data_dir + '/data_out/state_evolution.csv', 'w', newline='') as csvfil
 
         
 #%% Load matlab data
-sim_data = np.loadtxt(data_dir + '/data_in/orange_weighted_swing_sim_B2.csv', dtype=np.float64, delimiter=',')
+sim_data = np.loadtxt(data_dir + '/data_in/black_weighted_swing_sim.csv', dtype=np.float64, delimiter=',')
 t_sim = sim_data[:,0]
 Theta0_sim = sim_data[:,1]
 Theta1_sim = sim_data[:,2]
@@ -449,14 +453,14 @@ matplotlib.use("Agg")
 
 writer = FFMpegWriter(fps=freq_target)
 
-fig, ax = plt.subplots()
+fig, ax = plt.subplots(dpi=200)
 image = plt.imshow(np.zeros((cv2.imread(img_dir + '/' + Img[0] + '.jpg').shape[0],cv2.imread(img_dir + '/' + Img[0] + '.jpg').shape[1],3)), alpha=0.5)
 base = plt.scatter([], [], s=2, c='tab:red',marker='+',zorder=2.5)
 mid = plt.scatter([], [], s=2, c='tab:green',zorder=2.5)
 end = plt.scatter([], [], s=2, c='tab:blue',zorder=2.5)
 curve, = plt.plot([], [])
 
-with writer.saving(fig, data_dir + '/videos/sim_overlay_B2' + '.mp4', 200):
+with writer.saving(fig, data_dir + '/videos/sim_overlay_dynID_test' + '.mp4', 200):
     for idx in range(t_sim.shape[0]):
         if idx % freq_target == 0:
             print('Generating animation, ' + str(idx/freq_target) + ' of ' + str(t_sim.shape[0]/freq_target) + 's')
@@ -472,6 +476,13 @@ with writer.saving(fig, data_dir + '/videos/sim_overlay_B2' + '.mp4', 200):
         curve.set_data(FK_evals[0]/FK_evals[2],FK_evals[1]/FK_evals[2])
 
         writer.grab_frame()
+
+        # For saving individual frames
+        if idx % 2 == 0:
+            if not os.path.exists(data_dir + '/stills/overlay_sim'):
+                os.makedirs(data_dir + '/stills/overlay_sim')
+            plt.savefig(data_dir + '/stills/overlay_sim/' + str(idx) + '.png', bbox_inches='tight', pad_inches=0.1)
+
 
     print("Finished")
     plt.close(fig)
