@@ -31,7 +31,6 @@ def plotim(idx,calib_vis=False,testpt=None):
     if calib_vis:
         marked_UV = P@marked_XYZ
         marked_UV = marked_UV/marked_UV[2]
-
         ax.scatter(marked_UV[0,:],marked_UV[1,:],s=5,c='yellow',zorder=2.5)
         # Robot base links
         base_links = P@np.array([[0,0,0,1],[0,0,0.333,1]]).T #,[0,-0.15,0.333,1],[0,0.15,0.333,1] # Joint2 axis if Joint=0
@@ -66,8 +65,8 @@ def UV_to_XZplane(u,v,Y=0):
 
 #%%
 # Paths 
-dataset_name = 'black_unweighted_phicost'
-data_date = '0829'
+dataset_name = 'orange_full_range_centered'
+data_date = '0830'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 
 print('Dataset: ' + dataset_name)
@@ -179,7 +178,7 @@ for n in range(len(ts)):
     base_XZ = UV_to_XZplane(base_UV[0], base_UV[1], base_Y)
     mid_XZ = UV_to_XZplane(mid_UV[0], mid_UV[1], mid_Y)
     end_XZ = UV_to_XZplane(end_UV[0], end_UV[1], end_Y)
-    # Determine base angle if applicable # TODO - it's actually the tip angle. But I already saved all the data as base angle.
+    # Determine base angle if applicable # TODO - it's actually the tip angle (alpha). But I already saved all the data as base angle.
     if len(UVs) > 3:
         base_ang_start_UV = [int(UVs[3][0]), int(UVs[3][1])]
         base_ang_end_UV = [int(UVs[4][0]), int(UVs[4][1])]

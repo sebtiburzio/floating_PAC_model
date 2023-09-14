@@ -30,38 +30,55 @@ def plotim(idx,calib_vis=False,testpt=None):
     ax.scatter(EE_start_px[0],EE_start_px[1],s=5,c='red',zorder=2.5)
     
     if calib_vis:
-        # Z-plane grid
-        grid_btm = P@np.array([np.linspace(-0.2,0.2,5).T,-0.2*np.ones(5),np.zeros(5),np.ones(5)])
-        grid_btm = grid_btm/grid_btm[2,:].reshape(1,-1)
-        grid_top = P@np.array([np.linspace(-0.2,0.2,5).T,0.2*np.ones(5),np.zeros(5),np.ones(5)])
-        grid_top = grid_top/grid_top[2,:].reshape(1,-1)
-        grid_left = P@np.array([-0.2*np.ones(5),np.linspace(-0.2,0.2,5).T,np.zeros(5),np.ones(5)])
-        grid_left = grid_left/grid_left[2,:].reshape(1,-1)
-        grid_right = P@np.array([0.2*np.ones(5),np.linspace(-0.2,0.2,5).T,np.zeros(5),np.ones(5)])
-        grid_right = grid_right/grid_right[2,:].reshape(1,-1)
-        for i in range(5):
-            ax.plot([grid_btm[0,i],grid_top[0,i]],[grid_btm[1,i],grid_top[1,i]],lw=1,c='aqua')
-            ax.plot([grid_left[0,i],grid_right[0,i]],[grid_left[1,i],grid_right[1,i]],lw=1,c='aqua')
-        # Y-plane grid
-        grid_btm = P@np.array([np.linspace(0,1.0,11).T,np.zeros(11),np.zeros(11),np.ones(11)])
-        grid_btm = grid_btm/grid_btm[2,:].reshape(1,-1)
-        grid_top = P@np.array([np.linspace(0,1.0,11),np.zeros(11),np.ones(11),np.ones(11)])
-        grid_top = grid_top/grid_top[2,:].reshape(1,-1)
-        grid_left = P@np.array([np.zeros(11),np.zeros(11),np.linspace(0,1.0,11),np.ones(11)])
-        grid_left = grid_left/grid_left[2,:].reshape(1,-1)
-        grid_right = P@np.array([np.ones(11),np.zeros(11),np.linspace(0,1.0,11),np.ones(11)])
-        grid_right = grid_right/grid_right[2,:].reshape(1,-1)
-        for i in range(11):
-            ax.plot([grid_btm[0,i],grid_top[0,i]],[grid_btm[1,i],grid_top[1,i]],lw=1,c='lime')
-            ax.plot([grid_left[0,i],grid_right[0,i]],[grid_left[1,i],grid_right[1,i]],lw=1,c='lime')
+        marked_UV = P@marked_XYZ
+        marked_UV = marked_UV/marked_UV[2]
+        ax.scatter(marked_UV[0,:],marked_UV[1,:],s=5,c='yellow',zorder=2.5)
         # Robot base links
         base_links = P@np.array([[0,0,0,1],[0,0,0.333,1]]).T #,[0,-0.15,0.333,1],[0,0.15,0.333,1] # Joint2 axis if Joint=0
         base_links = base_links/base_links[2,:].reshape(1,-1)
         ax.plot(base_links[0,:],base_links[1,:],lw=3,c='slategrey')
+        # # Z-plane grid
+        # grid_btm = P@np.array([np.linspace(-0.2,0.2,5).T,-0.2*np.ones(5),np.zeros(5),np.ones(5)])
+        # grid_btm = grid_btm/grid_btm[2,:].reshape(1,-1)
+        # grid_top = P@np.array([np.linspace(-0.2,0.2,5).T,0.2*np.ones(5),np.zeros(5),np.ones(5)])
+        # grid_top = grid_top/grid_top[2,:].reshape(1,-1)
+        # grid_left = P@np.array([-0.2*np.ones(5),np.linspace(-0.2,0.2,5).T,np.zeros(5),np.ones(5)])
+        # grid_left = grid_left/grid_left[2,:].reshape(1,-1)
+        # grid_right = P@np.array([0.2*np.ones(5),np.linspace(-0.2,0.2,5).T,np.zeros(5),np.ones(5)])
+        # grid_right = grid_right/grid_right[2,:].reshape(1,-1)
+        # for i in range(5):
+        #     ax.plot([grid_btm[0,i],grid_top[0,i]],[grid_btm[1,i],grid_top[1,i]],lw=1,c='aqua')
+        #     ax.plot([grid_left[0,i],grid_right[0,i]],[grid_left[1,i],grid_right[1,i]],lw=1,c='aqua')
+        # # Y-plane grid
+        # grid_btm = P@np.array([np.linspace(0,1.0,11).T,np.zeros(11),np.zeros(11),np.ones(11)])
+        # grid_btm = grid_btm/grid_btm[2,:].reshape(1,-1)
+        # grid_top = P@np.array([np.linspace(0,1.0,11),np.zeros(11),np.ones(11),np.ones(11)])
+        # grid_top = grid_top/grid_top[2,:].reshape(1,-1)
+        # grid_left = P@np.array([np.zeros(11),np.zeros(11),np.linspace(0,1.0,11),np.ones(11)])
+        # grid_left = grid_left/grid_left[2,:].reshape(1,-1)
+        # grid_right = P@np.array([np.ones(11),np.zeros(11),np.linspace(0,1.0,11),np.ones(11)])
+        # grid_right = grid_right/grid_right[2,:].reshape(1,-1)
+        # for i in range(11):
+        #     ax.plot([grid_btm[0,i],grid_top[0,i]],[grid_btm[1,i],grid_top[1,i]],lw=1,c='lime')
+        #     ax.plot([grid_left[0,i],grid_right[0,i]],[grid_left[1,i],grid_right[1,i]],lw=1,c='lime')
 
     if testpt is not None:
         ax.scatter(testpt[0],testpt[1],s=5,c='yellow',zorder=2.5)
     print(imgs[idx])
+
+# Marked points for calibration visualation
+marked_XYZ = np.array([
+                       [0.154,0.149,0.0,1.0], # FR3 TERI base
+                       [0.154,-0.150,0.0,1.0], # FR3 TERI base
+                       [-0.238,0.149,0.0,1.0], # FR3 TERI base
+                       [-0.238,-0.149,0.0,1.0], # FR3 TERI base
+                       [0.154,0.149,-0.03,1.0], # FR3 TERI base
+                       [0.154,-0.150,-0.03,1.0], # FR3 TERI base
+                       [-0.238,0.149,-0.03,1.0], # FR3 TERI base
+                       [-0.238,-0.149,-0.03,1.0], # FR3 TERI base
+                       [0.055,0.0,0.14,1.0], # FR3 link0 arrow
+                       [0.0715,0.0,0.00135,1.0], # FR3 link0 front edge
+                    ]).T
 
 def plot_markers(idx, plot_mask=True, save=False):
     img_name = imgs[idx]
@@ -113,8 +130,8 @@ def UV_to_XZplane(u,v,Y=0):
 
 #%%
 # Paths 
-dataset_name = 'black_short_weighted_swing'
-data_date = '0801'
+dataset_name = 'orange_weighted_wide'
+data_date = '1309'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 
 print('Dataset: ' + dataset_name)
@@ -139,12 +156,11 @@ EE_start_XYZ = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1, 
 EE_start_px = P@EE_start_XYZ
 EE_start_px = EE_start_px/EE_start_px[2]
 plotim(0,True)
-# TODO - adjust camera calibration here?
 
 #%%
 # Define regions of interest
-R_row_start = 500
-R_row_end = 600
+R_row_start = 0
+R_row_end = 75
 R_col_start = 300
 R_col_end = 375
 G_row_start = 0
@@ -169,9 +185,9 @@ B_row_end = 1080
 B_col_start = 0
 B_col_end = 1920
 # Set Y positions of markers
-base_Y = EE_start_XYZ[1] - 0.01
-mid_Y = EE_start_XYZ[1] - 0.01
-end_Y = EE_start_XYZ[1] - 0.015
+base_Y = EE_start_XYZ[1] - 0.015
+mid_Y = EE_start_XYZ[1] - 0.0075
+end_Y = EE_start_XYZ[1] - 0.0125
 print("Assuming base at Y=" + str(base_Y))
 print("Assuming mid at Y=" + str(mid_Y))
 print("Assuming end at Y=" + str(end_Y))
@@ -200,9 +216,9 @@ lower_B = np.array([90,50,60])
 upper_B = np.array([120,255,255])
 
 # Estimate starting positions 
-base_pos_px = np.array([150,1000]) # (v,u) / (row,col)
-mid_pos_px = np.array([375,1075])
-end_pos_px = np.array([625,1225])
+base_pos_px = np.array([100,1000]) # (v,u) / (row,col)
+mid_pos_px = np.array([550,950])
+end_pos_px = np.array([1000,950])
 
 count = 0
 test_max = 1e9
