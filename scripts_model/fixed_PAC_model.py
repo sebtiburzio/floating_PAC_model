@@ -10,7 +10,8 @@ import pickle
 # Constant parameters
 m_L, m_E, L, D = sm.symbols('m_L m_E L D')  # m_L - total mass of cable, m_E - mass of weighted end
 p = sm.Matrix([m_L, m_E, L, D])
-num_masses = 4  # Number of masses to discretise along length (not including end mass)
+num_masses = 6  # Number of masses to discretise along length (not including end mass)
+gamma = sm.symbols('gamma')  # Gravity direction
 
 # Configuration variables
 theta_0, theta_1 = sm.symbols('theta_0 theta_1')
@@ -33,16 +34,16 @@ s, v, d = sm.symbols('s v d')
 tic = time.perf_counter()
 
 # Spine x,z in object base frame, defined as if it was reflected in the robot XY plane
-alpha = -(theta_0*v + 0.5*theta_1*v**2) # negative curvature so sense matches robot frame Y axis rotation
-fk[0] = L*sm.integrate(sm.sin(alpha),(v, 0, s)) # x. when theta=0, x=0.
+alpha = theta_0*v + 0.5*theta_1*v**2
+fk[0] = -L*sm.integrate(sm.sin(alpha),(v, 0, s)) # x. when theta=0, x=0.
 fk[1] = -L*sm.integrate(sm.cos(alpha),(v, 0, s)) # z. when theta=0, z=-L. 
 # A manual subsitution is needed here to get around a SymPy bug: https://github.com/sympy/sympy/issues/25093
 # TODO - remove when fix included in SymPy release
 fk = fk.subs(1/sm.sqrt(theta_1), sm.sqrt(1/theta_1))
 
 # FK position at d in cross section
-rot_alpha = sm.rot_axis3(alpha.subs(v,s))[:2,:2]
-fk = fk + D*rot_alpha@sm.Matrix([0, d])
+rot_alpha = sm.rot_axis3(alpha.subs(v,s))[:2,:2] # +ve rotations around robot base Y axis (CW in XZ plane)
+fk = fk + D*rot_alpha@sm.Matrix([d, 0])
 
 toc = time.perf_counter()
 print("FK gen time: " + str(toc-tic))
@@ -55,27 +56,29 @@ f_FK = sm.lambdify((theta,p,s,d), fk, "mpmath")
 tic = time.perf_counter()
 
 # Energy
-U = m_E*sm.integrate((fk[1].subs(s,1)),(d,-1/2,1/2))
+U = m_E*sm.integrate(((sm.sin(gamma)*fk[0] + sm.cos(gamma)*fk[1]).subs(s,1)),(d,-1/2,1/2))
 for i in range(num_masses):
-    U += (m_L/num_masses)*sm.integrate((fk[1].subs(s,i/num_masses)),(d,-1/2,1/2))
+    U += (m_L/num_masses)*sm.integrate(((sm.sin(gamma)*fk[0] + sm.cos(gamma)*fk[1]).subs(s,i/num_masses + 1/(num_masses*2))),(d,-1/2,1/2))
 
 # Potential force
-G = sm.Matrix([9.81*(U)]).jacobian(theta).T
+G = sm.Matrix([9.81*(U.subs(gamma,0))]).jacobian(theta).T
+Gv = sm.Matrix([9.81*(U)]).jacobian(theta).T
 
 toc = time.perf_counter()
 print("G gen time: " + str(toc-tic))
 
 pickle.dump(G, open("../generated_functions/fixed/G", "wb"))
+pickle.dump(Gv, open("../generated_functions/fixed/Gv", "wb"))
 
 #%% 
 # Inertia matrix
 tic = time.perf_counter()
 
 J = (fk.subs(s, 1)).jacobian(theta)
-B = 0.5*m_E*sm.integrate(J.transpose()@J, (d, -1/2, 1/2))
+B = m_E*sm.integrate(J.T@J, (d, -1/2, 1/2))
 for i in range(num_masses):
-    J = (fk.subs(s, i/num_masses)).jacobian(theta)
-    B += 0.5*(m_L/num_masses)*sm.integrate(J.transpose()@J, (d, -1/2, 1/2))
+    J = (fk.subs(s, i/num_masses + 1/(num_masses*2))).jacobian(theta)
+    B += (m_L/num_masses)*sm.integrate(J.T@J, (d, -1/2, 1/2))
 
 toc = time.perf_counter()
 print("B gen time: " + str(toc-tic))

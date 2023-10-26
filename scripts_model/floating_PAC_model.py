@@ -11,6 +11,7 @@ import pickle
 m_L, m_E, L, D = sm.symbols('m_L m_E L D')  # m_L - total mass of cable, m_E - mass of weighted end
 p = sm.Matrix([m_L, m_E, L, D])
 num_masses = 6  # Number of masses to discretise along length (not including end mass)
+gamma = sm.symbols('gamma')  # Gravity direction
 
 # Configuration variables
 theta_0, theta_1, x, z, phi = sm.symbols('theta_0 theta_1 x z phi')
@@ -32,8 +33,8 @@ s, v, d = sm.symbols('s v d')
 tic = time.perf_counter()
 
 # Spine x,z in object base frame, defined as if it was reflected in the robot XY plane
-alpha = -(theta_0*v + 0.5*theta_1*v**2) # negative curvature so sense matches robot frame Y axis rotation
-fk[0] = L*sm.integrate(sm.sin(alpha),(v, 0, s)) # x. when theta=0, x=0.
+alpha = theta_0*v + 0.5*theta_1*v**2 # negative curvature so sense matches robot frame Y axis rotation
+fk[0] = -L*sm.integrate(sm.sin(alpha),(v, 0, s)) # x. when theta=0, x=0.
 fk[1] = -L*sm.integrate(sm.cos(alpha),(v, 0, s)) # z. when theta=0, z=-L. 
 # A manual subsitution is needed here to get around a SymPy bug: https://github.com/sympy/sympy/issues/25093
 # TODO - remove when fix included in SymPy release
@@ -47,21 +48,23 @@ J_mid_fixed = fk_mid_fixed.jacobian(sm.Matrix([theta_0, theta_1]))
 J_end_fixed = fk_end_fixed.jacobian(sm.Matrix([theta_0, theta_1]))
 
 # 3DOF floating base
-# Base rotation and curvature direction is clockwise around Y axis.
-# Note sympy docs say the rot_axis functions produce a clockwise rotation with positive argument, to me it seems to be the opposite.
-rot_phi = sm.rot_axis2(-phi)[[0,2],[0,2]]
-rot_alpha = sm.rot_axis2(-alpha.subs(v,s))[[0,2],[0,2]]
-fk = sm.Matrix([x, z]) + rot_phi@(fk + D*rot_alpha@sm.Matrix([0, d]))
+rot_phi = sm.rot_axis3(phi)[:2,:2] # +ve rotations around robot base Y axis (CW in XZ plane)
+rot_alpha = sm.rot_axis3(alpha.subs(v,s))[:2,:2]
+fk = sm.Matrix([x, z]) + rot_phi@(fk + D*rot_alpha@sm.Matrix([d, 0]))
+
+fka = sm.Matrix([fk, phi + alpha.subs(v,s)])
 
 toc = time.perf_counter()
 print("FK gen time: " + str(toc-tic))
 
 pickle.dump(fk, open("../generated_functions/floating/fk", "wb"))
+pickle.dump(fka, open("../generated_functions/floating/fka", "wb"))
 pickle.dump(fk_mid_fixed, open("../generated_functions/fixed/fk_mid_fixed", "wb"))
 pickle.dump(fk_end_fixed, open("../generated_functions/fixed/fk_end_fixed", "wb"))
 pickle.dump(J_mid_fixed, open("../generated_functions/fixed/J_mid_fixed", "wb"))
 pickle.dump(J_end_fixed, open("../generated_functions/fixed/J_end_fixed", "wb"))
 f_FK = sm.lambdify((q,p,s,d), fk, "mpmath")
+f_FKA = sm.lambdify((q,p,s,d), fka, "mpmath")
 f_FK_mf = sm.lambdify((theta,p), fk_mid_fixed, "mpmath")
 f_FK_ef = sm.lambdify((theta,p), fk_end_fixed, "mpmath")
 f_J_mf = sm.lambdify((theta,p), J_mid_fixed, "mpmath")
@@ -72,48 +75,52 @@ f_J_ef = sm.lambdify((theta,p), J_end_fixed, "mpmath")
 tic = time.perf_counter()
 
 # Energy
-U = m_E*sm.integrate((fk[1].subs(s,1)),(d,-1/2,1/2))
+U = 0.08*sm.integrate(((sm.sin(gamma)*fk[0] + sm.cos(gamma)*fk[1]).subs(s,0)),(d,-1/2,1/2)) # % Base mass currently just FT sensor flange mass. Should be combined with cable clamp and adapter (these are currently included in cable weight)
+U += m_E*sm.integrate(((sm.sin(gamma)*fk[0] + sm.cos(gamma)*fk[1]).subs(s,1)),(d,-1/2,1/2))
 for i in range(num_masses):
-    U += (m_L/num_masses)*sm.integrate((fk[1].subs(s,i/num_masses)),(d,-1/2,1/2))
+    U += (m_L/num_masses)*sm.integrate(((sm.sin(gamma)*fk[0] + sm.cos(gamma)*fk[1]).subs(s,i/num_masses + 1/(num_masses*2))),(d,-1/2,1/2))
 
 # Potential force
-G = sm.Matrix([9.81*(U)]).jacobian(q)
+G = sm.Matrix([9.81*(U.subs(gamma,0))]).jacobian(q).T
+Gv = sm.Matrix([9.81*(U)]).jacobian(q).T
 
 toc = time.perf_counter()
 print("G gen time: " + str(toc-tic))
 
 pickle.dump(G, open("../generated_functions/floating/G", "wb"))
-f_G = sm.lambdify((q,p), G, "mpmath")
+pickle.dump(Gv, open("../generated_functions/floating/Gv", "wb"))
 
 #%% 
 # Inertia matrix
 tic = time.perf_counter()
 
+J = (fk.subs(s, 0)).jacobian(q)
+B = 0.08*sm.integrate(J.T@J, (d, -1/2, 1/2)) #Base mass currently just FT sensor flange mass. Should be combined with cable clamp and adapter (these are currently included in cable weight)
 J = (fk.subs(s, 1)).jacobian(q)
-B = 0.5*m_E*sm.integrate(J.transpose()@J, (d, -1/2, 1/2))
+B += m_E*sm.integrate(J.T@J, (d, -1/2, 1/2))
 for i in range(num_masses):
-    J = (fk.subs(s, i/num_masses)).jacobian(q)
-    B += 0.5*(m_L/num_masses)*sm.integrate(J.transpose()@J, (d, -1/2, 1/2))
+    J = (fk.subs(s, i/num_masses + 1/(num_masses*2))).jacobian(q)
+    B += (m_L/num_masses)*sm.integrate(J.T@J, (d, -1/2, 1/2))
 
 toc = time.perf_counter()
 print("B gen time: " + str(toc-tic))
 
 pickle.dump(B, open("../generated_functions/floating/B", "wb"))
-f_B = sm.lambdify((q,p), B, "mpmath")
 
 #%% 
 # Centrifugal/Coriolis matrix
-# tic = time.perf_counter()
+tic = time.perf_counter()
 
-# C = sm.zeros(5,5)      
-# for i in range(5):            
-#     for j in range(5):    
-#         for k in range(5):
-#             Christoffel = 0.5*(sm.diff(B[i,j],q[k]) + sm.diff(B[i,k],q[j]) - sm.diff(B[j,k],q[i]))
-#             C[i,j] = C[i,j] + Christoffel*dq[k]
+C = sm.zeros(5,5)      
+for i in range(5):            
+    for j in range(5):    
+        for k in range(5):
+            Christoffel = 0.5*(sm.diff(B[i,j],q[k]) + sm.diff(B[i,k],q[j]) - sm.diff(B[j,k],q[i]))
+            C[i,j] = C[i,j] + Christoffel*dq[k]
 
-# toc = time.perf_counter()
-# print("C gen time: " + str(toc-tic))
+toc = time.perf_counter()
+print("C gen time: " + str(toc-tic))
 
-# pickle.dump(C, open("../generated_functions/floating/C", "wb"))
-# f_C = sm.lambdify((q,p,dq), C, "mpmath")
+pickle.dump(C, open("../generated_functions/floating/C", "wb"))
+
+# %%

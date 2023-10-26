@@ -9,28 +9,35 @@ m_L, m_E, L, D = sm.symbols('m_L m_E L D')  # m_L - total mass of cable, m_E - m
 p = sm.Matrix([m_L, m_E, L, D])
 # Configuration variables
 theta_0, theta_1, x, z, phi = sm.symbols('theta_0 theta_1 x z phi')
-theta = sm.Matrix([theta_0, theta_1])
 q = sm.Matrix([theta_0, theta_1, x, z, phi])
+dtheta_0, dtheta_1, dx, dz, dphi = sm.symbols('dtheta_0 dtheta_1 dx dz dphi')
+dq = sm.Matrix([dtheta_0, dtheta_1, dx, dz, dphi])
 # Integration variables
 s, d = sm.symbols('s d')
+# Gravity direction
+gamma = sm.symbols('gamma')  
 
-# Load serialised functions
+# Load serialised functions # TODO (maybe) - swap order of theta a p arguments to match matlab code style
 f_FK = sm.lambdify((q,p,s,d), pickle.load(open("./generated_functions/floating/fk", "rb")), "mpmath")
 def eval_fk(q, p_vals, s, d): 
     return np.array(f_FK(q, p_vals, s, d).apply(mp.re).tolist(), dtype=float)
 
-f_FK_mid = sm.lambdify((theta,p), pickle.load(open("./generated_functions/fixed/fk_mid_fixed", "rb")), "mpmath")
-def eval_midpt(theta, p_vals): 
-    return np.array(f_FK_mid(theta, p_vals).apply(mp.re).tolist(), dtype=float)
+f_FKA = sm.lambdify((q,p,s,d), pickle.load(open("./generated_functions/floating/fka", "rb")), "mpmath")
+def eval_fka(q, p_vals, s, d): 
+    return np.array(f_FKA(q, p_vals, s, d).apply(mp.re).tolist(), dtype=float)
 
-f_FK_end = sm.lambdify((theta,p), pickle.load(open("./generated_functions/fixed/fk_end_fixed", "rb")), "mpmath")
-def eval_endpt(theta, p_vals): 
-    return np.array(f_FK_end(theta, p_vals).apply(mp.re).tolist(), dtype=float)
+f_G = sm.lambdify((q,p), pickle.load(open("./generated_functions/floating/G", "rb")), "mpmath")
+def eval_G(q, p_vals): 
+    return np.array(f_G(q, p_vals).apply(mp.re).tolist(), dtype=float)
 
-f_J_mid = sm.lambdify((theta,p), pickle.load(open("./generated_functions/fixed/J_mid_fixed", "rb")), "mpmath")
-def eval_J_midpt(theta, p_vals): 
-    return np.array(f_J_mid(theta, p_vals).apply(mp.re).tolist(), dtype=float)
+f_Gv = sm.lambdify((q,gamma,p), pickle.load(open("./generated_functions/floating/Gv", "rb")), "mpmath")
+def eval_Gv(q, gamma, p_vals): 
+    return np.array(f_Gv(q, gamma, p_vals).apply(mp.re).tolist(), dtype=float)
 
-f_J_end = sm.lambdify((theta,p), pickle.load(open("./generated_functions/fixed/J_end_fixed", "rb")), "mpmath")
-def eval_J_endpt(theta, p_vals): 
-    return np.array(f_J_end(theta, p_vals).apply(mp.re).tolist(), dtype=float)
+f_B = sm.lambdify((q,p), pickle.load(open("./generated_functions/floating/B", "rb")), "mpmath")
+def eval_B(q, p_vals): 
+    return np.array(f_B(q, p_vals).apply(mp.re).tolist(), dtype=float)
+
+f_C = sm.lambdify((q,dq,p), pickle.load(open("./generated_functions/floating/C", "rb")), "mpmath")
+def eval_C(q, dq, p_vals): 
+    return np.array(f_C(q, dq, p_vals).apply(mp.re).tolist(), dtype=float)
