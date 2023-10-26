@@ -18,13 +18,19 @@ These are interactive scripts that generally have parameters that need to be adj
 
 Uses the directory of image frames captured in the experiment and outputs the positions of the base, middle and end coloured markers on the object, in the XZ plane of the object model. The ROS timestamps are embedded as the image names.
 
+![image](https://github.com/sebtiburzio/floating_PAC_model/assets/95340175/f309ddf7-ced5-4aa6-a411-365695cc84a1)
+
 ### image_processing_manual.py
 
 Version where marker points can be manually selected in each frame instead of automatically by HSV filtering.
 
 ### post_processing.py
 
-Processes the time series of manipulator EE state, FT measurements and marker positions extracted from the images. Resample data to consistent rate, extract curvature configurations of Theta from the marker positions, calculated derivatives. Output is saved to `data_out\` and `processed.npz`. Also can generate animations of the state in XY plane or projected over the recorded image frames.
+Processes the time series of manipulator EE state, FT measurements and marker positions extracted from the images. Resample data to consistent rate, extract curvature configurations of Theta from the marker positions, calculate derivatives. Output is saved to `data_out\` and `processed.npz`. Also can generate animations of the state in XY plane or projected over the recorded image frames.
+
+https://github.com/sebtiburzio/floating_PAC_model/assets/95340175/37dc3b1c-74fa-4f70-a370-83a530ec3c7e
+
+https://github.com/sebtiburzio/floating_PAC_model/assets/95340175/2147ab62-2974-4144-902b-fff92b42dbe9
 
 ### static_processing.py
 
