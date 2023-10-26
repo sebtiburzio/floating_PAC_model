@@ -103,7 +103,7 @@ def plot_on_image(idx):
 #%%
 # Data paths
 dataset_name = 'black_weighted'
-data_date = '1309'
+data_date = '0913-full_dyn_evolutions'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 if not os.path.exists(data_dir + '/videos'):
             os.makedirs(data_dir + '/videos')
@@ -150,6 +150,7 @@ RMat_EE = np.array([[O_T_EE[:,0], O_T_EE[:,1],O_T_EE[:,2]],
 # The Phi angle of the model is then just the rotation around the robot Y axis. Doesn't work if there is also rotation around the Z axis.
 RPY_EE = R.from_matrix(RMat_EE).as_euler('xzy', degrees=False) # Extrinsic Roll, Yaw, Pitch parametrisation. x=pi, z=0, y=Phi
 Phi_meas = RPY_EE[:,2]
+print("X should be 0 and Z should be Pi in this plot:")
 plt.plot(RPY_EE) # Worth checking that x=pi, z=0
 plt.legend(['x','z','y'])
 # Move robot EE position to cable attachment point. This also relies on the assumptions above.
@@ -426,7 +427,7 @@ with open(data_dir + '/data_out/state_evolution.csv', 'w', newline='') as csvfil
     writer.writerow(['ts', 'X', 'Z', 'Phi', 'Theta0', 'Theta1', 'dX', 'dZ', 'dPhi', 'dTheta0', 'dTheta1', 'ddX', 'ddZ', 'ddPhi', 'ddTheta0', 'ddTheta1'])
     for n in range(len(t_target)):
         writer.writerow([t_target[n], 
-                            X[n], Z[n], Phi[n], Theta0[n], Theta1[n], 
+                            X[n], Z[n], Phi[n], Theta0[n], Theta1[n], # I don't know why I didn't use the Theta first order like in the model...
                             dX[n], dZ[n], dPhi[n], dTheta0[n], dTheta1[n], 
                             ddX[n], ddZ[n], ddPhi[n], ddTheta0[n], ddTheta1[n]])
 # # Only relevant for quasi static experiments

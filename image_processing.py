@@ -130,8 +130,8 @@ def UV_to_XZplane(u,v,Y=0):
 
 #%%
 # Paths 
-dataset_name = 'orange_weighted_wide'
-data_date = '1309'
+dataset_name = 'black_weighted_swing'
+data_date = '0801-swing_data'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 
 print('Dataset: ' + dataset_name)
@@ -186,8 +186,8 @@ B_col_start = 0
 B_col_end = 1920
 # Set Y positions of markers
 base_Y = EE_start_XYZ[1] - 0.015
-mid_Y = EE_start_XYZ[1] - 0.0075
-end_Y = EE_start_XYZ[1] - 0.0125
+mid_Y = EE_start_XYZ[1] - 0.01
+end_Y = EE_start_XYZ[1] - 0.01
 print("Assuming base at Y=" + str(base_Y))
 print("Assuming mid at Y=" + str(mid_Y))
 print("Assuming end at Y=" + str(end_Y))

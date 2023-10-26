@@ -13,7 +13,7 @@ target_evaluators = [eval_midpt, eval_endpt, eval_J_midpt, eval_J_endpt]
 #%%
 # Data paths
 dataset_name = 'orange_short_weighted_equilibria'
-data_date = '0802'
+data_date = '0802-equilibrium_data'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 
 print('Dataset: ' + dataset_name)

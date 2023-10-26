@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+# TODO - this hasn't been updated since being developed further in Matlab. Either needs to be reviewed or deleted
+
 #%%
 import os
 import pickle

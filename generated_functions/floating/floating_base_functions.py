@@ -26,18 +26,20 @@ f_FKA = sm.lambdify((q,p,s,d), pickle.load(open("./generated_functions/floating/
 def eval_fka(q, p_vals, s, d): 
     return np.array(f_FKA(q, p_vals, s, d).apply(mp.re).tolist(), dtype=float)
 
-f_G = sm.lambdify((q,p), pickle.load(open("./generated_functions/floating/G", "rb")), "mpmath")
-def eval_G(q, p_vals): 
-    return np.array(f_G(q, p_vals).apply(mp.re).tolist(), dtype=float)
+# Loading the dynamic functions takes a long time # TODO - fix, probably in Fresnel computation
 
-f_Gv = sm.lambdify((q,gamma,p), pickle.load(open("./generated_functions/floating/Gv", "rb")), "mpmath")
-def eval_Gv(q, gamma, p_vals): 
-    return np.array(f_Gv(q, gamma, p_vals).apply(mp.re).tolist(), dtype=float)
+# f_G = sm.lambdify((q,p), pickle.load(open("./generated_functions/floating/G", "rb")), "mpmath")
+# def eval_G(q, p_vals): 
+#     return np.array(f_G(q, p_vals).apply(mp.re).tolist(), dtype=float)
 
-f_B = sm.lambdify((q,p), pickle.load(open("./generated_functions/floating/B", "rb")), "mpmath")
-def eval_B(q, p_vals): 
-    return np.array(f_B(q, p_vals).apply(mp.re).tolist(), dtype=float)
+# f_Gv = sm.lambdify((q,gamma,p), pickle.load(open("./generated_functions/floating/Gv", "rb")), "mpmath")
+# def eval_Gv(q, gamma, p_vals): 
+#     return np.array(f_Gv(q, gamma, p_vals).apply(mp.re).tolist(), dtype=float)
 
-f_C = sm.lambdify((q,dq,p), pickle.load(open("./generated_functions/floating/C", "rb")), "mpmath")
-def eval_C(q, dq, p_vals): 
-    return np.array(f_C(q, dq, p_vals).apply(mp.re).tolist(), dtype=float)
+# f_B = sm.lambdify((q,p), pickle.load(open("./generated_functions/floating/B", "rb")), "mpmath")
+# def eval_B(q, p_vals): 
+#     return np.array(f_B(q, p_vals).apply(mp.re).tolist(), dtype=float)
+
+# f_C = sm.lambdify((q,dq,p), pickle.load(open("./generated_functions/floating/C", "rb")), "mpmath")
+# def eval_C(q, dq, p_vals): 
+#     return np.array(f_C(q, dq, p_vals).apply(mp.re).tolist(), dtype=float)

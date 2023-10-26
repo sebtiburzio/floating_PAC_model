@@ -66,7 +66,7 @@ def UV_to_XZplane(u,v,Y=0):
 #%%
 # Paths 
 dataset_name = 'orange_full_range_centered'
-data_date = '0830'
+data_date = '0830-orientation_expt'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 
 print('Dataset: ' + dataset_name)
@@ -93,9 +93,9 @@ plotim(0,True)
 
 #%%
 # Set Y positions of markers
-base_Y = EE_start_XYZ[1] - 0.01
-mid_Y = EE_start_XYZ[1] - 0.01
-end_Y = EE_start_XYZ[1] - 0.015
+base_Y = EE_start_XYZ[1] - 0.015
+mid_Y = EE_start_XYZ[1] - 0.0075
+end_Y = EE_start_XYZ[1] - 0.0125
 print("Assuming base at Y=" + str(base_Y))
 print("Assuming mid at Y=" + str(mid_Y))
 print("Assuming end at Y=" + str(end_Y))
