@@ -137,8 +137,10 @@ W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=r
 
 # Physical definitions for object set up
 print("REMEMBER TO SET THE OBJECT PROPERTIES!!!")
-p_vals = [0.6,0.23,0.6,0.02] # cable properties: mass (length), mass (end), length, diameter # TODO load these like in matlab
+with np.load('object_parameters/black_weighted.npz') as obj_params:
+    p_vals = list(obj_params['p_vals']) # cable properties: mass (length), mass (end), length, diameter
 base_offset = 0.0485 # Offset distance of cable attachment point from measured robot EE frame (in EE frame)
+p_vals = [0.6,0.23,0.6,0.02]
 
 # Copy relevant planar data
 # Base position and orientation from robot state

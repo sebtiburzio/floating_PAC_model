@@ -29,7 +29,8 @@ Z_mid_meas = data[:,5]
 X_end_meas = data[:,6]
 Z_end_meas = data[:,7]
 
-p_vals = [0.25, 0.23, 0.45, 0.015] # cable properties: mass (length), mass (end), length, diameter
+with np.load('object_parameters/black_weighted.npz') as obj_params:
+    p_vals = list(obj_params['p_vals']) # cable properties: mass (length), mass (end), length, diameter
 
 #%%
 # Transform marker points to fixed PAC frame (subtract X/Z, rotate back phi)
