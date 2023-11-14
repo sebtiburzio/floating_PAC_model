@@ -26,8 +26,8 @@ f_FKA = sm.lambdify((q,p,s,d), pickle.load(open("./generated_functions/floating/
 def eval_fka(q, p_vals, s, d): 
     return np.array(f_FKA(q, p_vals, s, d).apply(mp.re).tolist(), dtype=float)
 
-f_J_end_wrt_base = sm.lambdify((x,z,phi,p), pickle.load(open("./generated_functions/floating/J_end_wrt_base", "rb")), "mpmath")
-def eval_J_end_wrt_base(x, z, phi, p_vals):
+f_J_end_wrt_base = sm.lambdify((q,p), pickle.load(open("./generated_functions/floating/J_end_wrt_base", "rb")), "mpmath")
+def eval_J_end_wrt_base(q, p_vals):
     return np.array(f_J_end_wrt_base(x, z, phi, p_vals).apply(mp.re).tolist(), dtype=float)
 
 # Loading the dynamic functions takes a long time # TODO - fix, probably in Fresnel computation

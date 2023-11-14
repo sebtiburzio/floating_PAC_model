@@ -72,7 +72,7 @@ f_FK_mf = sm.lambdify((theta,p), fk_mid_fixed, "mpmath")
 f_FK_ef = sm.lambdify((theta,p), fk_end_fixed, "mpmath")
 f_J_mf = sm.lambdify((theta,p), J_mid_fixed, "mpmath")
 f_J_ef = sm.lambdify((theta,p), J_end_fixed, "mpmath")
-f_J_eb = sm.lambdify((x,z,phi,p), J_end_wrt_base, "mpmath")
+f_J_eb = sm.lambdify((q,p), J_end_wrt_base, "mpmath")
 
 #%% 
 # Potential (gravity) vector
