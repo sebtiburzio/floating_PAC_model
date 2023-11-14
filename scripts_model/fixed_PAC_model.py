@@ -45,11 +45,26 @@ fk = fk.subs(1/sm.sqrt(theta_1), sm.sqrt(1/theta_1))
 rot_alpha = sm.rot_axis3(alpha.subs(v,s))[:2,:2] # +ve rotations around robot base Y axis (CW in XZ plane)
 fk = fk + D*rot_alpha@sm.Matrix([d, 0])
 
+# TODO - generating these from here instead of floating base model not working...
+# # FK of midpoint and endpoint in base frame (for curvature IK)
+# fk_mid_fixed = fk.subs(s, 0.5)
+# fk_end_fixed = fk.subs(s, 1)
+# J_mid_fixed = fk_mid_fixed.jacobian(sm.Matrix([theta_0, theta_1]))
+# J_end_fixed = fk_end_fixed.jacobian(sm.Matrix([theta_0, theta_1]))
+
 toc = time.perf_counter()
 print("FK gen time: " + str(toc-tic))
 
 pickle.dump(fk, open("../generated_functions/fixed/fk", "wb"))
+# pickle.dump(fk_mid_fixed, open("../generated_functions/fixed/fk_mid_fixed", "wb"))
+# pickle.dump(fk_end_fixed, open("../generated_functions/fixed/fk_end_fixed", "wb"))
+# pickle.dump(J_mid_fixed, open("../generated_functions/fixed/J_mid_fixed", "wb"))
+# pickle.dump(J_end_fixed, open("../generated_functions/fixed/J_end_fixed", "wb"))
 f_FK = sm.lambdify((theta,p,s,d), fk, "mpmath")
+# f_FK_mf = sm.lambdify((theta,p), fk_mid_fixed, "mpmath")
+# f_FK_ef = sm.lambdify((theta,p), fk_end_fixed, "mpmath")
+# f_J_mf = sm.lambdify((theta,p), J_mid_fixed, "mpmath")
+# f_J_ef = sm.lambdify((theta,p), J_end_fixed, "mpmath")
 
 #%% 
 # Potential (gravity) vector

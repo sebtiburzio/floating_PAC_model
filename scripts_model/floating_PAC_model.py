@@ -50,9 +50,11 @@ J_end_fixed = fk_end_fixed.jacobian(sm.Matrix([theta_0, theta_1]))
 # 3DOF floating base
 rot_phi = sm.rot_axis3(phi)[:2,:2] # +ve rotations around robot base Y axis (CW in XZ plane)
 rot_alpha = sm.rot_axis3(alpha.subs(v,s))[:2,:2]
-fk = sm.Matrix([x, z]) + rot_phi@(fk + D*rot_alpha@sm.Matrix([d, 0]))
+fk = sm.Matrix([x, z]) + rot_phi@(fk + D*rot_alpha@sm.Matrix([d, 0])) # Position
+fka = sm.Matrix([fk, phi + alpha.subs(v,s)]) # Position and orientation
 
-fka = sm.Matrix([fk, phi + alpha.subs(v,s)])
+# Jacobian of end pose wrt floating base configuration
+J_end_wrt_base = fka.jacobian(sm.Matrix([x, z, phi]))
 
 toc = time.perf_counter()
 print("FK gen time: " + str(toc-tic))
@@ -63,12 +65,14 @@ pickle.dump(fk_mid_fixed, open("../generated_functions/fixed/fk_mid_fixed", "wb"
 pickle.dump(fk_end_fixed, open("../generated_functions/fixed/fk_end_fixed", "wb"))
 pickle.dump(J_mid_fixed, open("../generated_functions/fixed/J_mid_fixed", "wb"))
 pickle.dump(J_end_fixed, open("../generated_functions/fixed/J_end_fixed", "wb"))
+pickle.dump(J_end_wrt_base, open("../generated_functions/floating/J_end_wrt_base", "wb"))
 f_FK = sm.lambdify((q,p,s,d), fk, "mpmath")
 f_FKA = sm.lambdify((q,p,s,d), fka, "mpmath")
 f_FK_mf = sm.lambdify((theta,p), fk_mid_fixed, "mpmath")
 f_FK_ef = sm.lambdify((theta,p), fk_end_fixed, "mpmath")
 f_J_mf = sm.lambdify((theta,p), J_mid_fixed, "mpmath")
 f_J_ef = sm.lambdify((theta,p), J_end_fixed, "mpmath")
+f_J_eb = sm.lambdify((x,z,phi,p), J_end_wrt_base, "mpmath")
 
 #%% 
 # Potential (gravity) vector
