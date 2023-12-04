@@ -54,7 +54,7 @@ fk = sm.Matrix([x, z]) + rot_phi@(fk + D*rot_alpha@sm.Matrix([d, 0])) # Position
 fka = sm.Matrix([fk, phi + alpha.subs(v,s)]) # Position and orientation
 
 # Jacobian of end pose wrt floating base configuration
-J_end_wrt_base = fka.jacobian(sm.Matrix([x, z, phi]))
+J_end_wrt_base = fka.subs([(s, 1),(d,0)]).jacobian(sm.Matrix([x, z, phi]))
 
 toc = time.perf_counter()
 print("FK gen time: " + str(toc-tic))
