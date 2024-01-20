@@ -6,7 +6,7 @@ This repository contains Python code used mostly for data processing, as well as
 
 The model is functionally the same as the Matlab version, however is currently much slower so mostly only useable for kinematics. The most likely candidate for improving this is the computation of the Fresnel functions (noting that these are manually replaced with an approximation in the Matlab version).
 
-Scripts defining the model are in `scripts_model` which outputs to `generated_functions`.
+Scripts defining the model are in `scripts_model` which outputs to `generated_functions`. In installable package version of the model equations is available [here](https://github.com/sebtiburzio/acdlo).
 
 ## Data Processing
 
