@@ -15,6 +15,8 @@ target_evaluators = [eval_midpt, eval_endpt, eval_J_midpt, eval_J_endpt]
 from utils import rot_XZ_on_Y, get_FK, find_curvature
 
 #%%
+# Define plotting helper functions
+
 # For plotting multiple data in a normalised time window
 # Pass data as a list of arrays (eg [X] or [X,Z])
 # Only works for data scaled to target sample rate
@@ -101,19 +103,19 @@ def plot_on_image(idx):
     plt.show()
 
 #%%
-# Data paths
-dataset_name = '650_0'
-data_date = '0402-loop_demo_static_id'
+# Provide experiment session (parent folder) and name (subfolder) to load dataset from './paramID_data'
+data_date = '0913-full_dyn_evolutions'
+dataset_name = 'black_weighted'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 if not os.path.exists(data_dir + '/videos'):
             os.makedirs(data_dir + '/videos')
 
+print('Date/Session: ' + data_date)
 print('Dataset: ' + dataset_name)
-print('Date: ' + data_date)
 print('Path: ' + data_dir)
 
 #%%
-# Import data
+# Import from the dataset
 img_dir = data_dir + '/images'
 # Camera intrinsic and extrinsic transforms
 with np.load(data_dir + '/../TFs_adj.npz') as tfs:
@@ -124,24 +126,30 @@ with np.load(data_dir + '/../TFs_adj.npz') as tfs:
 # Timestamps
 ts_OTEE = np.loadtxt(data_dir + '/EE_pose.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
 ts_markers = np.loadtxt(data_dir + '/marker_positions.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
-# ts_W = np.loadtxt(data_dir + '/EE_wrench.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
-ts_W = np.array([ts_OTEE[0],ts_OTEE[-1]]) # Switch to this if no FT data
+ts_W = np.loadtxt(data_dir + '/EE_wrench.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
+if (ts_W.size == 0): 
+    ts_W = np.array([ts_OTEE[0],ts_OTEE[-1]])
+    print("Note: No F/T data available")
 ts_begin = np.max([np.min(ts_OTEE), np.min(ts_markers), np.min(ts_W)])
 ts_end = np.min([np.max(ts_OTEE), np.max(ts_markers), np.max(ts_W)])
 cam_delay = 0.0
 # Measurements
 O_T_EE = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1, usecols=range(1,17))
 markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows=1, usecols=range(1,10))
-# W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=range(1,7))
-W = np.array([[0,0,0,0,0,0],[0,0,0,0,0,0]]) # Switch to this if no FT data
+W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=range(1,7)) 
+if (W.size == 0): 
+    W = np.array([[0,0,0,0,0,0],[0,0,0,0,0,0]])
 
-# Physical definitions for object set up
-print("REMEMBER TO SET THE OBJECT PROPERTIES!!!")
-with np.load('object_parameters/black_short_loop_100g.npz') as obj_params:
+#%%
+# Physical definitions for object set up - provide the correct object parameters file and base offset
+with np.load('object_parameters/black_weighted.npz') as obj_params:
     p_vals = list(obj_params['p_vals']) # cable properties: mass (length), mass (end), length, diameter
 base_offset = 0.0485 # Offset distance of cable attachment point from measured robot EE frame (in EE frame)
+print("p_vals", p_vals, "mass_cable, mass_end, length, diameter")
+print("base_offset", base_offset, "from robot EE to cable base")
 
-# Copy relevant planar data
+#%%
+# Copy relevant data to planar space - check values are reasonable
 # Base position and orientation from robot state
 RMat_EE = np.array([[O_T_EE[:,0], O_T_EE[:,1],O_T_EE[:,2]],
                     [O_T_EE[:,4], O_T_EE[:,5],O_T_EE[:,6]],
@@ -151,12 +159,19 @@ RMat_EE = np.array([[O_T_EE[:,0], O_T_EE[:,1],O_T_EE[:,2]],
 # The Phi angle of the model is then just the rotation around the robot Y axis. Doesn't work if there is also rotation around the Z axis.
 RPY_EE = R.from_matrix(RMat_EE).as_euler('xzy', degrees=False) # Extrinsic Roll, Yaw, Pitch parametrisation. x=pi, z=0, y=Phi
 Phi_meas = RPY_EE[:,2]
-print("X should be Pi and Z should be 0 in this plot:")
-plt.plot(RPY_EE) # Worth checking that x=pi, z=0
-plt.legend(['x','z','y'])
 # Move robot EE position to cable attachment point. This also relies on the assumptions above.
 X_meas = O_T_EE[:,12] - base_offset*np.sin(Phi_meas)
 Z_meas = O_T_EE[:,14] - base_offset*np.cos(Phi_meas)
+# Y positions
+Y_meas = np.mean(O_T_EE[:,13]) # This should be basically constant
+# Plot to check expected values
+fig, axs = plt.subplots(1,2)
+print("X should be +/-Pi and Z should be 0 in the left plot. Y should be constant in the right plot.")
+axs[0].plot(RPY_EE)
+axs[0].legend(['x rotation','z rotation','y rotation'])
+axs[1].plot(O_T_EE[:,13])
+axs[1].legend(['y position'])
+axs[1].set_ylim([-0.7,0.7])
 # Marker positions extracted from images
 X_base_meas = markers[:,0]
 Z_base_meas = markers[:,1]
@@ -164,22 +179,19 @@ X_mid_meas = markers[:,2]
 Z_mid_meas = markers[:,3]
 X_end_meas = markers[:,4]
 Z_end_meas = markers[:,5]
-# Y positions
-Y_meas = np.mean(O_T_EE[:,13]) # This should be basically constant
 Y_assumed = markers[0,6:9] # The [base, mid, end] Y positions used to extract 3D marker positions from the images (minor offset from nominal plane by object thickness)
+print("The assumed Y-positions of the cable markers are:", Y_assumed)
 # Force/torque as measured
 Fx_meas = W[:,0]
 Fz_meas = W[:,2]
 Ty_meas = W[:,4]
 
 #%% 
-#------------------------------- Manual checks and changes - start -------------------------------#
-
-# Check camera calibration
+# Check that the camera calibration is reasonable
 plot_calib_check()
 
 #%%
-# Trim dead time from beginning and end of data
+# Trim dead time from beginning and end of data - check the plots and set the values in the next cell
 fig, axs = plt.subplots(5,1)
 axs[0].plot(ts_markers, X_end_meas)
 axs[1].plot(ts_markers, Z_end_meas)
@@ -191,9 +203,12 @@ fig.suptitle('X_end, Z_end, Phi, Fx, Fz, Ty')
 
 #%%
 # Change these referring to plot, or skip to use full set of available data
-ts_begin = 3.75e10 + 1.7120695e18 
-ts_end = 7.4e10 + 1.7120695e18
-cam_delay = 0.0 # Difference between timestamps of first movement visible in camera and robot state data. Usually 0.03-0.06s
+ts_begin = 3.6e10 + 1.6946175e18 
+ts_end = 4.6e10 + 1.6946175e18
+
+#%% 
+# Add delay to the camera frames if there is a noticeable difference when overalying the robot state and the camera images
+cam_delay = 0.03 # Difference between timestamps of first movement visible in camera and robot state data. Usually 0.03-0.06s
 
 #%%
 # Convert absolute ROS timestamps to relative seconds
@@ -203,8 +218,8 @@ t_W = ts_W/1e9-ts_begin/1e9
 t_end = ts_end/1e9-ts_begin/1e9
 
 #%%
-# Express force/torque in robot frame
-Fx_sync = np.interp(t_OTEE, t_W, Fx_meas) # TODO - OK to interp to robot state times here?
+# Express force/torque in robot frame (force measured by sensor, opposite force applied to object)
+Fx_sync = np.interp(t_OTEE, t_W, Fx_meas) # TOCHECK - OK to interp to robot state times here?
 Fz_sync = np.interp(t_OTEE, t_W, Fz_meas)
 Ty_sync = np.interp(t_OTEE, t_W, Ty_meas)
 F_sensor = np.vstack([Fx_sync, np.zeros(len(t_OTEE)), Fz_sync]).T
@@ -213,14 +228,11 @@ F_robot = np.einsum('ijk,ik->ij', RMat_EE, F_sensor)
 T_robot = np.einsum('ijk,ik->ij', RMat_EE, T_sensor)
 Fx_robot = F_robot[:,0]
 Fz_robot = F_robot[:,2]
-Ty_robot = T_robot[:,1] # TODO - Adjust F/T meas due to offset from FT frame?'
-# TODO - this is force measured by sensor, opposite force applied to object. Maybe invert.
-
-#-------------------------------- Manual checks and changes - end --------------------------------#
+Ty_robot = T_robot[:,1] # TODO - Adjust F/T meas due to offset from FT frame?
 
 #%%
-# Interpolate to uniform sample times
-freq_target = 6
+# Interpolate to uniform sample times (change freq_target to match camera FPS)
+freq_target = 30
 t_target = np.arange(0, t_end, 1/freq_target)
 X = np.interp(t_target, t_OTEE, X_meas)
 Z = np.interp(t_target, t_OTEE, Z_meas)
@@ -239,13 +251,13 @@ idxs = [(np.abs(t_markers - t_t)).argmin() for t_t in t_target] # find closest t
 Img = np.array([ts_markers[i] for i in idxs], dtype=str)
 
 #%%
-# Optionally take the object base position from the extracted marker instead of robot state
-# Can look better if the calibration is off. However it hides any delay in the camera frames
+# OPTIONAL: take the object base position from the extracted marker instead of robot state
+# Can look better if the camera calibration is off. However it hides any delay in the camera frames
 X = X_base
 Z = Z_base
 
 #%%
-# Extract curvature from marker points
+# Extract curvature configurations from marker points
 # Transform marker points to fixed PAC frame (subtract X/Z, rotate back phi)
 fk_targets_mid = np.vstack([X_mid-X,Z_mid-Z]).T
 fk_targets_end = np.vstack([X_end-X,Z_end-Z]).T
@@ -301,8 +313,8 @@ plt.ylim(-(p_vals[2]+0.1), 0.1)
 ax.set_aspect('equal')
 ax.grid(True)
 
-draw_FT = False
-in_robot_frame = True
+draw_FT = True
+in_robot_frame = True # False to draw in fixed cable base frame
 post = '_robot' if in_robot_frame else ''
 
 with writer.saving(fig, data_dir + '/videos/curvature_anim' + post + '.mp4', 200):
@@ -446,7 +458,7 @@ with open(data_dir + '/data_out/measurements.csv', 'w', newline='') as csvfile:
 #                         fk_targets[n,2], fk_targets[n,3]])
 
         
-#%% Load matlab data
+#%% Below is used to animate simulated evolutions from Matlab over the measured data
 sim_data = np.loadtxt(data_dir + '/data_in/black_weighted_swing_sim.csv', dtype=np.float64, delimiter=',')
 t_sim = sim_data[:,0]
 Theta0_sim = sim_data[:,1]
