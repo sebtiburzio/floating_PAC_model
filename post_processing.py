@@ -102,8 +102,8 @@ def plot_on_image(idx):
 
 #%%
 # Data paths
-dataset_name = 'black_weighted'
-data_date = '0913-full_dyn_evolutions'
+dataset_name = '650_0'
+data_date = '0402-loop_demo_static_id'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 if not os.path.exists(data_dir + '/videos'):
             os.makedirs(data_dir + '/videos')
@@ -124,23 +124,22 @@ with np.load(data_dir + '/../TFs_adj.npz') as tfs:
 # Timestamps
 ts_OTEE = np.loadtxt(data_dir + '/EE_pose.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
 ts_markers = np.loadtxt(data_dir + '/marker_positions.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
-ts_W = np.loadtxt(data_dir + '/EE_wrench.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
-# ts_W = np.array([ts_OTEE[0],ts_OTEE[-1]]) # Switch to this if no FT data
+# ts_W = np.loadtxt(data_dir + '/EE_wrench.csv', dtype=np.ulonglong, delimiter=',', skiprows=1, usecols=0)
+ts_W = np.array([ts_OTEE[0],ts_OTEE[-1]]) # Switch to this if no FT data
 ts_begin = np.max([np.min(ts_OTEE), np.min(ts_markers), np.min(ts_W)])
 ts_end = np.min([np.max(ts_OTEE), np.max(ts_markers), np.max(ts_W)])
 cam_delay = 0.0
 # Measurements
 O_T_EE = np.loadtxt(data_dir + '/EE_pose.csv', delimiter=',', skiprows=1, usecols=range(1,17))
 markers = np.loadtxt(data_dir + '/marker_positions.csv', delimiter=',', skiprows=1, usecols=range(1,10))
-W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=range(1,7))
-# W = np.array([[0,0,0,0,0,0],[0,0,0,0,0,0]]) # Switch to this if no FT data
+# W = np.loadtxt(data_dir + '/EE_wrench.csv', delimiter=',', skiprows=1, usecols=range(1,7))
+W = np.array([[0,0,0,0,0,0],[0,0,0,0,0,0]]) # Switch to this if no FT data
 
 # Physical definitions for object set up
 print("REMEMBER TO SET THE OBJECT PROPERTIES!!!")
-with np.load('object_parameters/black_weighted.npz') as obj_params:
+with np.load('object_parameters/black_short_loop_100g.npz') as obj_params:
     p_vals = list(obj_params['p_vals']) # cable properties: mass (length), mass (end), length, diameter
 base_offset = 0.0485 # Offset distance of cable attachment point from measured robot EE frame (in EE frame)
-p_vals = [0.6,0.23,0.6,0.02]
 
 # Copy relevant planar data
 # Base position and orientation from robot state
@@ -152,7 +151,7 @@ RMat_EE = np.array([[O_T_EE[:,0], O_T_EE[:,1],O_T_EE[:,2]],
 # The Phi angle of the model is then just the rotation around the robot Y axis. Doesn't work if there is also rotation around the Z axis.
 RPY_EE = R.from_matrix(RMat_EE).as_euler('xzy', degrees=False) # Extrinsic Roll, Yaw, Pitch parametrisation. x=pi, z=0, y=Phi
 Phi_meas = RPY_EE[:,2]
-print("X should be 0 and Z should be Pi in this plot:")
+print("X should be Pi and Z should be 0 in this plot:")
 plt.plot(RPY_EE) # Worth checking that x=pi, z=0
 plt.legend(['x','z','y'])
 # Move robot EE position to cable attachment point. This also relies on the assumptions above.
@@ -192,9 +191,9 @@ fig.suptitle('X_end, Z_end, Phi, Fx, Fz, Ty')
 
 #%%
 # Change these referring to plot, or skip to use full set of available data
-ts_begin = 3.6e10 + 1.6946175e18 
-ts_end = 4.6e10 + 1.6946175e18
-cam_delay = 0.06 # Difference between timestamps of first movement visible in camera and robot state data. Usually 0.03-0.06s
+ts_begin = 3.75e10 + 1.7120695e18 
+ts_end = 7.4e10 + 1.7120695e18
+cam_delay = 0.0 # Difference between timestamps of first movement visible in camera and robot state data. Usually 0.03-0.06s
 
 #%%
 # Convert absolute ROS timestamps to relative seconds
@@ -221,7 +220,7 @@ Ty_robot = T_robot[:,1] # TODO - Adjust F/T meas due to offset from FT frame?'
 
 #%%
 # Interpolate to uniform sample times
-freq_target = 30
+freq_target = 6
 t_target = np.arange(0, t_end, 1/freq_target)
 X = np.interp(t_target, t_OTEE, X_meas)
 Z = np.interp(t_target, t_OTEE, Z_meas)
@@ -432,6 +431,11 @@ with open(data_dir + '/data_out/state_evolution.csv', 'w', newline='') as csvfil
                             X[n], Z[n], Phi[n], Theta0[n], Theta1[n], # I don't know why I didn't use the Theta first order like in the model...
                             dX[n], dZ[n], dPhi[n], dTheta0[n], dTheta1[n], 
                             ddX[n], ddZ[n], ddPhi[n], ddTheta0[n], ddTheta1[n]])
+with open(data_dir + '/data_out/measurements.csv', 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile, delimiter=',')
+    writer.writerow(['ts','Img','X_mid', 'Z_mid', 'X_end', 'Z_end'])
+    for n in range(len(t_target)):
+        writer.writerow([t_target[n], Img[n], X_mid[n], Z_mid[n], X_end[n], Z_end[n]])
 # # Only relevant for quasi static experiments
 # with open(data_dir + '/data_out/theta_equilibria.csv', 'w', newline='') as csvfile:
 #     writer = csv.writer(csvfile, delimiter=',')
