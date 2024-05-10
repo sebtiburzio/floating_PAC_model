@@ -12,24 +12,24 @@ target_evaluators = [eval_midpt, eval_endpt, eval_J_midpt, eval_J_endpt]
 
 #%%
 # Data paths
-dataset_name = 'orange_short_weighted_equilibria'
-data_date = '0802-equilibrium_data'
+dataset_name = 'equilibria'
+data_date = '0402-loop_static_id'
 data_dir = os.getcwd() + '/paramID_data/' + data_date + '/' + dataset_name
 
 print('Dataset: ' + dataset_name)
 print('Date: ' + data_date)
 print('Path: ' + data_dir)
 
-data = np.loadtxt(data_dir + '/sequence_results.csv', delimiter=',', skiprows=1)
-Gamma = data[:,1]
-X_base_meas = data[:,2]
-Z_base_meas = data[:,3]
-X_mid_meas = data[:,4]
-Z_mid_meas = data[:,5]
-X_end_meas = data[:,6]
-Z_end_meas = data[:,7]
+data = np.loadtxt(data_dir + '/sequence_results.csv', delimiter=',', skiprows=1, usecols=range(0,10))
+Gamma = data[:,3]
+X_base_meas = data[:,4]
+Z_base_meas = data[:,5]
+X_mid_meas = data[:,6]
+Z_mid_meas = data[:,7]
+X_end_meas = data[:,8]
+Z_end_meas = data[:,9]
 
-with np.load('object_parameters/black_weighted.npz') as obj_params:
+with np.load('object_parameters/black_short_loop_100g.npz') as obj_params:
     p_vals = list(obj_params['p_vals']) # cable properties: mass (length), mass (end), length, diameter
 
 #%%
