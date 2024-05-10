@@ -9,8 +9,8 @@ from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 from matplotlib.animation import FFMpegWriter
 
-from generated_functions.floating.floating_base_functions import eval_fk
-from generated_functions.fixed.fixed_base_functions import eval_midpt, eval_endpt, eval_J_midpt, eval_J_endpt
+from acdlo.floating_base import eval_fk
+from acdlo.static_base import eval_midpt, eval_endpt, eval_J_midpt, eval_J_endpt
 target_evaluators = [eval_midpt, eval_endpt, eval_J_midpt, eval_J_endpt]
 from utils import rot_XZ_on_Y, get_FK, find_curvature
 
@@ -317,7 +317,7 @@ draw_FT = True
 in_robot_frame = True # False to draw in fixed cable base frame
 post = '_robot' if in_robot_frame else ''
 
-with writer.saving(fig, data_dir + '/videos/curvature_anim' + post + '.mp4', 200):
+with writer.saving(fig, data_dir + '/videos/curvature_anim' + post + '_.mp4', 200):
     for i in range(fk_targets.shape[0]):
         if i % freq_target == 0:
             print('Generating animation, ' + str(i/freq_target) + ' of ' + str(t_end) + 's')
